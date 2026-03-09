@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 Project IC Telegram Bot - Render Deployment Version
-Includes health check server for Render.
+Includes health check server for Render and API proxy for PWA.
 """
 
 import os
 import asyncio
 import logging
+import json
 from aiohttp import web
 from telegram.ext import Application
 
@@ -35,22 +36,94 @@ except:
 
 from telegram_voice_bot import setup_bot
 
+# Environment variables
+MERALION_API_URL = os.environ.get("MERALION_API_URL", "http://meralion.org:8010/v1")
+MERALION_API_KEY = os.environ.get("MERALION_API_KEY", "")
+MERALION_MODEL = os.environ.get("MERALION_MODEL", "MERaLiON/MERaLiON-3-10B")
+
+# API Proxy for PWA
+async def api_chat_handler(request):
+    """Proxy chat requests to MERaLiON API (avoids CORS issues in browser)."""
+    try:
+        data = await request.json()
+        messages = data.get("messages", [])
+        
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            headers = {
+                "Authorization": f"Bearer {MERALION_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            
+            payload = {
+                "model": MERALION_MODEL,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 150,
+            }
+            
+            async with session.post(
+                f"{MERALION_API_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return web.json_response(result)
+                else:
+                    error_text = await response.text()
+                    logger.error(f"MERaLiON API error: {response.status} - {error_text}")
+                    return web.json_response(
+                        {"error": "API request failed"},
+                        status=500
+                    )
+    except Exception as e:
+        logger.error(f"API proxy error: {e}")
+        return web.json_response(
+            {"error": str(e)},
+            status=500
+        )
+
 # Health check server for Render
 async def health_check(request):
     return web.Response(text="OK", status=200)
 
 async def start_health_server():
     app = web.Application()
-    app.add_routes([web.get('/', health_check), web.get('/health', health_check)])
+    
+    # CORS middleware for API endpoint
+    async def cors_middleware(app, handler):
+        async def middleware_handler(request):
+            if request.method == "OPTIONS":
+                response = web.Response()
+            else:
+                response = await handler(request)
+            
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+            return response
+        return middleware_handler
+    
+    app.middlewares.append(cors_middleware)
+    
+    app.add_routes([
+        web.get('/', health_check),
+        web.get('/health', health_check),
+        web.post('/api/chat', api_chat_handler),
+        web.options('/api/chat', api_chat_handler),
+    ])
+    
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Health check server running on port {port}")
+    logger.info(f"Health check server + API proxy running on port {port}")
 
 async def main():
-    # Start health check server
+    # Start health check server + API proxy
     await start_health_server()
     
     # Setup and start the Telegram bot
