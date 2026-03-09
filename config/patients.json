@@ -1,0 +1,20 @@
+{
+  "patients": [
+    {
+      "id": "telegram-706283824",
+      "name": "Eric",
+      "preferred_name": "Eric",
+      "telegram_id": "706283824",
+      "language": "en",
+      "case_worker_id": "706283824"
+    },
+    {
+      "id": "telegram-8483200452",
+      "name": "Luyang",
+      "preferred_name": "Luyang",
+      "telegram_id": "8483200452",
+      "language": "en",
+      "case_worker_id": ""
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: project-ic-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/bot_server.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CASE_WORKER_CHAT_ID
+        sync: false
+      - key: MERALION_API_URL
+        value: http://meralion.org:8010/v1
+      - key: MERALION_API_KEY
+        sync: false
+      - key: MERALION_MODEL
+        value: MERaLiON/MERaLiON-3-10B

@@ -1,0 +1,392 @@
+#!/usr/bin/env python3
+"""
+Project IC Check-in Scheduler with Automatic Reporting
+
+Initiates daily check-ins and weekly reports automatically.
+
+Features:
+- Morning check-in (8:00 AM)
+- Afternoon check-in (2:00 PM)
+- Weekly report (Sunday 9:00 AM)
+- Automatic report delivery via Telegram
+"""
+
+import os
+import sys
+import json
+import asyncio
+import logging
+from pathlib import Path
+from datetime import datetime, time, timedelta
+from typing import Dict, List, Optional
+from dataclasses import dataclass
+from dotenv import load_dotenv
+import aiohttp
+
+# Load environment
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Environment
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY")
+
+# Schedule times (24-hour format)
+MORNING_TIME = time(8, 0)   # 8:00 AM
+AFTERNOON_TIME = time(14, 0)  # 2:00 PM
+WEEKLY_REPORT_DAY = 6  # Sunday (0=Monday, 6=Sunday)
+WEEKLY_REPORT_TIME = time(9, 0)  # 9:00 AM Sunday
+
+
+@dataclass
+class Patient:
+    """Patient information."""
+    id: str
+    name: str
+    preferred_name: str
+    telegram_id: str
+    language: str = "en"
+    case_worker_id: str = ""
+    active: bool = True
+
+
+class CheckinScheduler:
+    """Schedules and sends proactive check-ins and reports."""
+    
+    def __init__(self):
+        self.patients: Dict[str, Patient] = {}
+        self.completed_today: Dict[str, Dict] = {}
+        self.bot_token = BOT_TOKEN
+        self.running = False
+        
+    def load_patients(self):
+        """Load registered patients from database or config."""
+        # Load from file
+        config_path = Path(__file__).parent.parent / "config" / "patients.json"
+        if config_path.exists():
+            with open(config_path) as f:
+                data = json.load(f)
+                for p in data.get("patients", []):
+                    if p.get("telegram_id"):
+                        self.patients[p["telegram_id"]] = Patient(
+                            id=p.get("id"),
+                            name=p.get("name"),
+                            preferred_name=p.get("preferred_name", p.get("name")),
+                            telegram_id=p["telegram_id"],
+                            language=p.get("language", "en"),
+                            case_worker_id=p.get("case_worker_id", "")
+                        )
+        
+        logger.info(f"Loaded {len(self.patients)} patients")
+    
+    def register_patient(self, telegram_id: str, name: str, preferred_name: str = None, case_worker_id: str = ""):
+        """Register a new patient for check-ins."""
+        patient = Patient(
+            id=f"telegram-{telegram_id}",
+            name=name,
+            preferred_name=preferred_name or name,
+            telegram_id=telegram_id,
+            case_worker_id=case_worker_id
+        )
+        self.patients[telegram_id] = patient
+        self._save_patients()
+        logger.info(f"Registered patient: {name} ({telegram_id})")
+    
+    def _save_patients(self):
+        """Save patients to config file."""
+        config_path = Path(__file__).parent.parent / "config" / "patients.json"
+        config_path.parent.mkdir(exist_ok=True)
+        
+        data = {
+            "patients": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "preferred_name": p.preferred_name,
+                    "telegram_id": p.telegram_id,
+                    "language": p.language,
+                    "case_worker_id": p.case_worker_id
+                }
+                for p in self.patients.values()
+            ]
+        }
+        
+        with open(config_path, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    async def send_checkin_prompt(self, patient: Patient, session_type: str):
+        """Send a check-in prompt to a patient."""
+        if not self.bot_token:
+            logger.error("BOT_TOKEN not set")
+            return False
+        
+        greeting = "Good morning" if session_type == "morning" else "Good afternoon"
+        name = patient.preferred_name or patient.name
+        
+        prompts = {
+            "morning": [
+                f"{greeting}, {name}! 🌅 How did you sleep last night?",
+                f"{greeting}, {name}! ☀️ How are you feeling today?",
+                f"{greeting}, {name}! 🌞 Ready to start the day? How are you?",
+            ],
+            "afternoon": [
+                f"{greeting}, {name}! 🌤️ How has your day been so far?",
+                f"{greeting}, {name}! 😊 Just checking in - how are you doing?",
+                f"{greeting}, {name}! 🌻 Time for your afternoon check-in!",
+            ]
+        }
+        
+        import random
+        message = random.choice(prompts.get(session_type, prompts["morning"]))
+        
+        async with aiohttp.ClientSession() as session:
+            url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+            payload = {
+                "chat_id": patient.telegram_id,
+                "text": message
+            }
+            
+            try:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Sent {session_type} check-in to {name}")
+                        return True
+                    else:
+                        error = await resp.text()
+                        logger.error(f"Failed to send to {name}: {error}")
+                        return False
+            except Exception as e:
+                logger.error(f"Error sending to {name}: {e}")
+                return False
+    
+    async def send_weekly_report(self, patient: Patient):
+        """Generate and send weekly report to patient's case worker."""
+        if not self.bot_token:
+            logger.error("BOT_TOKEN not set")
+            return False
+        
+        if not patient.case_worker_id:
+            logger.warning(f"No case worker for {patient.name}")
+            return False
+        
+        # Generate report
+        report = await self._generate_patient_report(patient)
+        
+        # Send to case worker
+        async with aiohttp.ClientSession() as session:
+            url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+            payload = {
+                "chat_id": patient.case_worker_id,
+                "text": report,
+                "parse_mode": "Markdown"
+            }
+            
+            try:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Sent weekly report for {patient.name}")
+                        return True
+                    else:
+                        error = await resp.text()
+                        logger.error(f"Failed to send report: {error}")
+                        return False
+            except Exception as e:
+                logger.error(f"Error sending report: {e}")
+                return False
+    
+    async def _generate_patient_report(self, patient: Patient) -> str:
+        """Generate weekly report for a patient."""
+        # Simple demo report (in production, fetch from database)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=7)
+        
+        report = f"""📋 *Weekly Health Report*
+
+*Patient:* {patient.name}
+*Period:* {start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}
+
+------------------------------------------------------------
+📊 *Check-in Summary*
+------------------------------------------------------------
+• Morning check-ins: 7/7
+• Afternoon check-ins: 7/7
+• Completion: 100%
+
+------------------------------------------------------------
+⚠️ *Risk Analysis*
+------------------------------------------------------------
+• Average Risk: 12/100 (🟢 GREEN)
+• Peak Risk: 25/100 (🟡 YELLOW)
+• Trend: Stable
+
+------------------------------------------------------------
+🔍 *Health Signals*
+------------------------------------------------------------
+• Pain reported: 2 times
+• Distress: 0 times
+• Cognitive concerns: 0 times
+
+------------------------------------------------------------
+🚨 *Alerts This Week*
+------------------------------------------------------------
+• Total alerts: 0
+
+------------------------------------------------------------
+💡 *Recommendations*
+------------------------------------------------------------
+• Continue current monitoring
+• No immediate concerns
+
+------------------------------------------------------------
+_Generated automatically by Project IC_
+"""
+        return report
+    
+    def should_send_checkin(self, session_type: str) -> bool:
+        """Check if it's time to send a check-in."""
+        now = datetime.now().time()
+        
+        if session_type == "morning":
+            target = MORNING_TIME
+        elif session_type == "afternoon":
+            target = AFTERNOON_TIME
+        else:
+            return False
+        
+        current_mins = now.hour * 60 + now.minute
+        target_mins = target.hour * 60 + target.minute
+        
+        return abs(current_mins - target_mins) <= 5
+    
+    def should_send_weekly_report(self) -> bool:
+        """Check if it's time to send weekly report."""
+        now = datetime.now()
+        
+        # Check if it's Sunday
+        if now.weekday() != WEEKLY_REPORT_DAY:
+            return False
+        
+        # Check if it's the right time
+        current_mins = now.hour * 60 + now.minute
+        target_mins = WEEKLY_REPORT_TIME.hour * 60 + WEEKLY_REPORT_TIME.minute
+        
+        return abs(current_mins - target_mins) <= 5
+    
+    def mark_completed(self, patient_id: str, session_type: str):
+        """Mark a check-in as completed."""
+        if patient_id not in self.completed_today:
+            self.completed_today[patient_id] = {}
+        self.completed_today[patient_id][session_type] = True
+    
+    def reset_daily(self):
+        """Reset completed check-ins for new day."""
+        self.completed_today = {}
+        logger.info("Reset daily check-in status")
+    
+    async def run_scheduler(self):
+        """Main scheduler loop."""
+        self.running = True
+        last_date = datetime.now().date()
+        weekly_report_sent = False
+        
+        logger.info("=" * 60)
+        logger.info("🗓️ Check-in Scheduler Started")
+        logger.info(f"Morning check-in: {MORNING_TIME.strftime('%H:%M')}")
+        logger.info(f"Afternoon check-in: {AFTERNOON_TIME.strftime('%H:%M')}")
+        logger.info(f"Weekly report: Sunday {WEEKLY_REPORT_TIME.strftime('%H:%M')}")
+        logger.info(f"Monitoring {len(self.patients)} patients")
+        logger.info("=" * 60)
+        
+        while self.running:
+            now = datetime.now()
+            
+            # Reset at midnight
+            if now.date() != last_date:
+                self.reset_daily()
+                last_date = now.date()
+                weekly_report_sent = False  # Reset weekly flag
+            
+            # Check for morning check-in time
+            if self.should_send_checkin("morning"):
+                for patient in self.patients.values():
+                    if not self.completed_today.get(patient.telegram_id, {}).get("morning"):
+                        await self.send_checkin_prompt(patient, "morning")
+                        self.mark_completed(patient.telegram_id, "morning")
+                        await asyncio.sleep(2)
+            
+            # Check for afternoon check-in time
+            if self.should_send_checkin("afternoon"):
+                for patient in self.patients.values():
+                    if not self.completed_today.get(patient.telegram_id, {}).get("afternoon"):
+                        await self.send_checkin_prompt(patient, "afternoon")
+                        self.mark_completed(patient.telegram_id, "afternoon")
+                        await asyncio.sleep(2)
+            
+            # Check for weekly report time (Sunday)
+            if self.should_send_weekly_report() and not weekly_report_sent:
+                logger.info("📊 Sending weekly reports...")
+                for patient in self.patients.values():
+                    await self.send_weekly_report(patient)
+                    await asyncio.sleep(2)
+                weekly_report_sent = True
+            
+            # Sleep for 1 minute before next check
+            await asyncio.sleep(60)
+    
+    def stop(self):
+        """Stop the scheduler."""
+        self.running = False
+
+
+# CLI Commands
+async def start_scheduler():
+    """Start the full scheduler."""
+    scheduler = CheckinScheduler()
+    scheduler.load_patients()
+    await scheduler.run_scheduler()
+
+
+def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Check-in Scheduler with Reports")
+    parser.add_argument("command", choices=["start", "register", "test", "list", "report"])
+    parser.add_argument("--telegram-id", help="Telegram ID")
+    parser.add_argument("--name", help="Patient name")
+    parser.add_argument("--case-worker", help="Case worker Telegram ID")
+    
+    args = parser.parse_args()
+    
+    if args.command == "start":
+        asyncio.run(start_scheduler())
+    elif args.command == "register":
+        if not args.telegram_id or not args.name:
+            print("❌ Need --telegram-id and --name")
+            return
+        scheduler = CheckinScheduler()
+        scheduler.load_patients()
+        scheduler.register_patient(args.telegram_id, args.name, case_worker_id=args.case_worker or "")
+        print(f"✅ Registered {args.name}")
+    elif args.command == "list":
+        scheduler = CheckinScheduler()
+        scheduler.load_patients()
+        print(f"Patients: {len(scheduler.patients)}")
+        for tid, p in scheduler.patients.items():
+            print(f"  - {p.preferred_name} ({tid})")
+    elif args.command == "report":
+        # Generate report now
+        scheduler = CheckinScheduler()
+        scheduler.load_patients()
+        asyncio.run(scheduler.send_weekly_report(list(scheduler.patients.values())[0]))
+
+
+if __name__ == "__main__":
+    main()

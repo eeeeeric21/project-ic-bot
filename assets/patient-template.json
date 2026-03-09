@@ -1,0 +1,48 @@
+{
+  "patient_id": "",
+  "name": "",
+  "preferred_name": "",
+  "age": null,
+  "conditions": [],
+  "medications": [
+    {
+      "name": "",
+      "dosage": "",
+      "frequency": "",
+      "time_of_day": []
+    }
+  ],
+  "interests": [],
+  "family_members": [
+    {
+      "name": "",
+      "relationship": "",
+      "phone": ""
+    }
+  ],
+  "emergency_contact": {
+    "name": "",
+    "relationship": "",
+    "phone": ""
+  },
+  "case_worker": {
+    "name": "",
+    "email": "",
+    "phone": ""
+  },
+  "preferences": {
+    "language": "english",
+    "use_singlish": true,
+    "greeting_style": "auntie",
+    "checkin_times": {
+      "morning": "09:00",
+      "evening": "19:00"
+    }
+  },
+  "recent_concerns": [],
+  "baseline": {
+    "avg_risk_score": null,
+    "common_symptoms": [],
+    "typical_mood": null
+  }
+}
