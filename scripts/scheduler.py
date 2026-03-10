@@ -19,6 +19,7 @@ import asyncio
 import logging
 from pathlib import Path
 from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from dotenv import load_dotenv
@@ -40,12 +41,15 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY")
 
-# Schedule times (24-hour format)
+# Schedule times (24-hour format, Singapore time)
 MORNING_TIME = time(8, 0)   # 8:00 AM
 AFTERNOON_TIME = time(14, 0)  # 2:00 PM
 EVENING_TIME = time(19, 0)  # 7:00 PM
 WEEKLY_REPORT_DAY = 6  # Sunday (0=Monday, 6=Sunday)
 WEEKLY_REPORT_TIME = time(9, 0)  # 9:00 AM Sunday
+
+# Singapore timezone
+SG_TIMEZONE = ZoneInfo("Asia/Singapore")
 
 
 @dataclass
@@ -212,7 +216,7 @@ class CheckinScheduler:
     async def _generate_patient_report(self, patient: Patient) -> str:
         """Generate weekly report for a patient."""
         # Simple demo report (in production, fetch from database)
-        end_date = datetime.now()
+        end_date = datetime.now(SG_TIMEZONE)
         start_date = end_date - timedelta(days=7)
         
         report = f"""📋 *Weekly Health Report*
@@ -259,7 +263,7 @@ _Generated automatically by Project IC_
     
     def should_send_checkin(self, session_type: str) -> bool:
         """Check if it's time to send a check-in."""
-        now = datetime.now().time()
+        now = datetime.now(SG_TIMEZONE).time()
         
         if session_type == "morning":
             target = MORNING_TIME
@@ -277,7 +281,7 @@ _Generated automatically by Project IC_
     
     def should_send_weekly_report(self) -> bool:
         """Check if it's time to send weekly report."""
-        now = datetime.now()
+        now = datetime.now(SG_TIMEZONE)
         
         # Check if it's Sunday
         if now.weekday() != WEEKLY_REPORT_DAY:
@@ -303,7 +307,7 @@ _Generated automatically by Project IC_
     async def run_scheduler(self):
         """Main scheduler loop."""
         self.running = True
-        last_date = datetime.now().date()
+        last_date = datetime.now(SG_TIMEZONE).date()
         weekly_report_sent = False
         
         logger.info("=" * 60)
@@ -316,7 +320,7 @@ _Generated automatically by Project IC_
         logger.info("=" * 60)
         
         while self.running:
-            now = datetime.now()
+            now = datetime.now(SG_TIMEZONE)
             
             # Reset at midnight
             if now.date() != last_date:
