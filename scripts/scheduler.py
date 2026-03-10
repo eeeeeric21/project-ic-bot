@@ -7,6 +7,7 @@ Initiates daily check-ins and weekly reports automatically.
 Features:
 - Morning check-in (8:00 AM)
 - Afternoon check-in (2:00 PM)
+- Evening check-in (7:00 PM)
 - Weekly report (Sunday 9:00 AM)
 - Automatic report delivery via Telegram
 """
@@ -42,6 +43,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY")
 # Schedule times (24-hour format)
 MORNING_TIME = time(8, 0)   # 8:00 AM
 AFTERNOON_TIME = time(14, 0)  # 2:00 PM
+EVENING_TIME = time(19, 0)  # 7:00 PM
 WEEKLY_REPORT_DAY = 6  # Sunday (0=Monday, 6=Sunday)
 WEEKLY_REPORT_TIME = time(9, 0)  # 9:00 AM Sunday
 
@@ -128,7 +130,7 @@ class CheckinScheduler:
             logger.error("BOT_TOKEN not set")
             return False
         
-        greeting = "Good morning" if session_type == "morning" else "Good afternoon"
+        greeting = "Good morning" if session_type == "morning" else "Good afternoon" if session_type == "afternoon" else "Good evening"
         name = patient.preferred_name or patient.name
         
         prompts = {
@@ -141,6 +143,11 @@ class CheckinScheduler:
                 f"{greeting}, {name}! 🌤️ How has your day been so far?",
                 f"{greeting}, {name}! 😊 Just checking in - how are you doing?",
                 f"{greeting}, {name}! 🌻 Time for your afternoon check-in!",
+            ],
+            "evening": [
+                f"{greeting}, {name}! 🌙 How was your day?",
+                f"{greeting}, {name}! 🌆 Time for your evening check-in. How are you feeling?",
+                f"{greeting}, {name}! ✨ Before you rest, how did today go?",
             ]
         }
         
@@ -258,6 +265,8 @@ _Generated automatically by Project IC_
             target = MORNING_TIME
         elif session_type == "afternoon":
             target = AFTERNOON_TIME
+        elif session_type == "evening":
+            target = EVENING_TIME
         else:
             return False
         
@@ -301,6 +310,7 @@ _Generated automatically by Project IC_
         logger.info("🗓️ Check-in Scheduler Started")
         logger.info(f"Morning check-in: {MORNING_TIME.strftime('%H:%M')}")
         logger.info(f"Afternoon check-in: {AFTERNOON_TIME.strftime('%H:%M')}")
+        logger.info(f"Evening check-in: {EVENING_TIME.strftime('%H:%M')}")
         logger.info(f"Weekly report: Sunday {WEEKLY_REPORT_TIME.strftime('%H:%M')}")
         logger.info(f"Monitoring {len(self.patients)} patients")
         logger.info("=" * 60)
@@ -328,6 +338,14 @@ _Generated automatically by Project IC_
                     if not self.completed_today.get(patient.telegram_id, {}).get("afternoon"):
                         await self.send_checkin_prompt(patient, "afternoon")
                         self.mark_completed(patient.telegram_id, "afternoon")
+                        await asyncio.sleep(2)
+            
+            # Check for evening check-in time
+            if self.should_send_checkin("evening"):
+                for patient in self.patients.values():
+                    if not self.completed_today.get(patient.telegram_id, {}).get("evening"):
+                        await self.send_checkin_prompt(patient, "evening")
+                        self.mark_completed(patient.telegram_id, "evening")
                         await asyncio.sleep(2)
             
             # Check for weekly report time (Sunday)
