@@ -141,7 +141,7 @@ async def main():
     scheduler = CheckinScheduler()
     scheduler.load_patients()
     asyncio.create_task(scheduler.run_scheduler())
-    logger.info("Check-in scheduler started (8 AM, 2 PM, weekly reports)")
+    logger.info("Check-in scheduler started (8 AM, 2 PM, 7 PM, weekly reports)")
     
     # Keep running
     while True:
