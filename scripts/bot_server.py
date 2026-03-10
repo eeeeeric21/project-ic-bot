@@ -35,6 +35,7 @@ except:
     pass
 
 from telegram_voice_bot import setup_bot
+from scheduler import CheckinScheduler
 
 # Environment variables
 MERALION_API_URL = os.environ.get("MERALION_API_URL", "http://meralion.org:8010/v1")
@@ -135,6 +136,12 @@ async def main():
     await application.updater.start_polling()
     
     logger.info("Bot is running!")
+    
+    # Start the check-in scheduler in background
+    scheduler = CheckinScheduler()
+    scheduler.load_patients()
+    asyncio.create_task(scheduler.run_scheduler())
+    logger.info("Check-in scheduler started (8 AM, 2 PM, weekly reports)")
     
     # Keep running
     while True:
