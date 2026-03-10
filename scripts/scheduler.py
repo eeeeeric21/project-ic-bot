@@ -277,7 +277,10 @@ _Generated automatically by Project IC_
         current_mins = now.hour * 60 + now.minute
         target_mins = target.hour * 60 + target.minute
         
-        return abs(current_mins - target_mins) <= 5
+        is_time = abs(current_mins - target_mins) <= 5
+        if is_time:
+            logger.info(f"⏰ Check-in window reached: {session_type} (current: {now.strftime('%H:%M')}, target: {target.strftime('%H:%M')})")
+        return is_time
     
     def should_send_weekly_report(self) -> bool:
         """Check if it's time to send weekly report."""
@@ -311,12 +314,13 @@ _Generated automatically by Project IC_
         weekly_report_sent = False
         
         logger.info("=" * 60)
-        logger.info("🗓️ Check-in Scheduler Started")
+        logger.info("🗓️ Check-in Scheduler Started (Singapore Time)")
         logger.info(f"Morning check-in: {MORNING_TIME.strftime('%H:%M')}")
         logger.info(f"Afternoon check-in: {AFTERNOON_TIME.strftime('%H:%M')}")
         logger.info(f"Evening check-in: {EVENING_TIME.strftime('%H:%M')}")
         logger.info(f"Weekly report: Sunday {WEEKLY_REPORT_TIME.strftime('%H:%M')}")
         logger.info(f"Monitoring {len(self.patients)} patients")
+        logger.info(f"Current SG time: {datetime.now(SG_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
         
         while self.running:
@@ -346,7 +350,9 @@ _Generated automatically by Project IC_
             
             # Check for evening check-in time
             if self.should_send_checkin("evening"):
+                logger.info(f"🌙 Evening check-in time reached. Patients to check: {len(self.patients)}")
                 for patient in self.patients.values():
+                    logger.info(f"Checking patient {patient.name}, completed: {self.completed_today.get(patient.telegram_id, {})}")
                     if not self.completed_today.get(patient.telegram_id, {}).get("evening"):
                         await self.send_checkin_prompt(patient, "evening")
                         self.mark_completed(patient.telegram_id, "evening")
