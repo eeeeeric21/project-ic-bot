@@ -7,7 +7,7 @@ Initiates daily check-ins and weekly reports automatically.
 Features:
 - Morning check-in (8:00 AM)
 - Afternoon check-in (2:00 PM)
-- Evening check-in (7:00 PM)
+- Evening check-in (8:00 PM)
 - Weekly report (Sunday 9:00 AM)
 - Automatic report delivery via Telegram
 """
@@ -44,7 +44,7 @@ SUPABASE_KEY = os.environ.get("SUPABASE_ANON_KEY")
 # Schedule times (24-hour format, Singapore time)
 MORNING_TIME = time(8, 0)   # 8:00 AM
 AFTERNOON_TIME = time(14, 0)  # 2:00 PM
-EVENING_TIME = time(19, 0)  # 7:00 PM
+EVENING_TIME = time(20, 0)  # 8:00 PM
 WEEKLY_REPORT_DAY = 6  # Sunday (0=Monday, 6=Sunday)
 WEEKLY_REPORT_TIME = time(9, 0)  # 9:00 AM Sunday
 
