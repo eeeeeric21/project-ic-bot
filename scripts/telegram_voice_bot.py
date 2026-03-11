@@ -580,17 +580,41 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def listmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /listmed command to list medications for a patient.
     
-    Usage: /listmed <patient_id>
+    Usage: /listmed [patient_name]
     """
     user = update.effective_user
     telegram_id = str(user.id)
     
-    # Allow patients to see their own meds, or case workers to see any
-    patient_id = context.args[0] if context.args else telegram_id
-    
-    if telegram_id != CASE_WORKER_CHAT_ID and patient_id != telegram_id:
-        await update.message.reply_text("⚠️ You can only view your own medications.")
-        return
+    # Determine which patient to show
+    if context.args:
+        patient_identifier = context.args[0]
+        
+        # Look up patient by ID or name
+        patient_id = None
+        if patient_identifier in scheduler.patients:
+            patient_id = patient_identifier
+        else:
+            # Search by name
+            for tid, p in scheduler.patients.items():
+                if patient_identifier.lower() in p.name.lower() or patient_identifier.lower() in p.preferred_name.lower():
+                    patient_id = tid
+                    break
+        
+        if not patient_id:
+            await update.message.reply_text(
+                f"⚠️ Patient \"{patient_identifier}\" not found.\n\n"
+                f"Registered patients:\n"
+                + "\n".join(f"• {p.name}" for p in scheduler.patients.values()),
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Only allow case workers or self
+        if telegram_id != CASE_WORKER_CHAT_ID and patient_id != telegram_id:
+            await update.message.reply_text("⚠️ You can only view your own medications.")
+            return
+    else:
+        patient_id = telegram_id
     
     if not scheduler.medication_manager:
         await update.message.reply_text("⚠️ Medication system not available.")
@@ -598,11 +622,16 @@ async def listmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     medications = scheduler.medication_manager.medications.get(patient_id, [])
     
+    # Get patient name
+    patient_name = patient_id
+    if patient_id in scheduler.patients:
+        patient_name = scheduler.patients[patient_id].name
+    
     if not medications:
-        await update.message.reply_text("📋 No medications registered.")
+        await update.message.reply_text(f"📋 No medications registered for {patient_name}.")
         return
     
-    msg = "💊 *Medications*\n\n"
+    msg = f"💊 *Medications for {patient_name}*\n\n"
     for med in medications:
         status = "✅" if med.active else "❌"
         msg += f"{status} {med.name} ({med.dosage})\n"
