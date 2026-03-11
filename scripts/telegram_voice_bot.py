@@ -547,10 +547,10 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             times_str = parts[4]
             times = [t.strip() for t in times_str.split(',')]
             
-            # Add medication
+            # Add medication (to Supabase if available)
             if scheduler.medication_manager:
-                medication = scheduler.medication_manager.add_medication(
-                    patient_id, med_name, dosage, "", times
+                medication = await scheduler.medication_manager.add_medication_async(
+                    patient_id, med_name, dosage, "", times, created_by=telegram_id
                 )
                 
                 # Get patient name
@@ -817,25 +817,38 @@ async def delmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             patient_id = parts[1]
             med_id = parts[2]
             
-            # Delete medication
+            # Delete medication from Supabase
             if scheduler.medication_manager:
+                # Find medication name before deleting
                 medications = scheduler.medication_manager.medications.get(patient_id, [])
-                for i, med in enumerate(medications):
+                deleted_name = "Medication"
+                deleted_dosage = ""
+                for med in medications:
                     if med.id == med_id:
-                        deleted_med = medications.pop(i)
-                        scheduler.medication_manager._save_medications_to_file()
-                        
-                        await query.edit_message_text(
-                            f"✅ *Medication Deleted*\n\n"
-                            f"• {deleted_med.name} ({deleted_med.dosage})\n"
-                            f"• Removed from {patient_id}'s schedule",
-                            parse_mode='Markdown'
-                        )
-                        return
+                        deleted_name = med.name
+                        deleted_dosage = med.dosage
+                        break
                 
-                await query.edit_message_text("⚠️ Medication not found.", parse_mode='Markdown')
+                # Delete from Supabase
+                success = await scheduler.medication_manager.delete_medication_async(patient_id, med_id)
+                
+                if success:
+                    patient_name = patient_id
+                    if patient_id in scheduler.patients:
+                        patient_name = scheduler.patients[patient_id].name
+                    
+                    await query.edit_message_text(
+                        f"✅ *Medication Deleted*\n\n"
+                        f"• {deleted_name} ({deleted_dosage})\n"
+                        f"• Removed from {patient_name}'s schedule",
+                        parse_mode='Markdown'
+                    )
+                else:
+                    await query.edit_message_text("⚠️ Failed to delete medication.", parse_mode='Markdown')
             else:
                 await query.edit_message_text("⚠️ Medication system not available.", parse_mode='Markdown')
+        else:
+            await query.edit_message_text("⚠️ Invalid medication data.", parse_mode='Markdown')
 
 
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -1,26 +1,26 @@
 -- Medication Reminder System Schema
--- Run this in Supabase SQL Editor
+-- Run this in Supabase SQL Editor: https://xhonxrvogiamqhpfouoh.supabase.co/project/default/sql
 
 -- ============================================
 -- 1. MEDICATIONS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS medications (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    patient_id TEXT NOT NULL, -- telegram_id for simplicity
+    patient_id TEXT NOT NULL, -- telegram_id
     
     -- Medication info
-    name TEXT NOT NULL,           -- "Metformin"
-    dosage TEXT,                   -- "500mg"
-    instructions TEXT,             -- "Take with food"
+    name TEXT NOT NULL,
+    dosage TEXT,
+    instructions TEXT,
     
-    -- Schedule (stored as HH:MM strings for simplicity)
-    reminder_times TEXT[] NOT NULL, -- {"08:00", "14:00", "20:00"}
+    -- Schedule (HH:MM format)
+    reminder_times TEXT[] NOT NULL,
     
     -- Tracking
     active BOOLEAN DEFAULT TRUE,
     
     -- Metadata
-    created_by TEXT,              -- case worker telegram_id
+    created_by TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -32,24 +32,24 @@ CREATE TABLE IF NOT EXISTS medication_reminders (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     medication_id UUID REFERENCES medications(id) ON DELETE CASCADE,
     patient_id TEXT NOT NULL,
+    medication_name TEXT NOT NULL,
+    dosage TEXT,
     
     -- Reminder details
-    scheduled_time TIMESTAMPTZ NOT NULL,
-    reminder_sent BOOLEAN DEFAULT FALSE,
-    reminder_sent_at TIMESTAMPTZ,
-    
-    -- Follow-up
-    followup_sent BOOLEAN DEFAULT FALSE,
-    followup_sent_at TIMESTAMPTZ,
+    scheduled_date DATE NOT NULL,
+    scheduled_time TEXT NOT NULL,
     
     -- Status
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'taken', 'skipped', 'missed')),
-    responded_at TIMESTAMPTZ,
-    skip_reason TEXT,
     
-    -- Alert escalation
-    case_worker_alerted BOOLEAN DEFAULT FALSE,
+    -- Timestamps
+    reminder_sent_at TIMESTAMPTZ,
+    followup_sent_at TIMESTAMPTZ,
+    responded_at TIMESTAMPTZ,
     case_worker_alerted_at TIMESTAMPTZ,
+    
+    -- Additional info
+    skip_reason TEXT,
     
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -58,8 +58,9 @@ CREATE TABLE IF NOT EXISTS medication_reminders (
 -- 3. INDEXES
 -- ============================================
 CREATE INDEX IF NOT EXISTS idx_medications_patient ON medications(patient_id);
+CREATE INDEX IF NOT EXISTS idx_medications_active ON medications(active);
 CREATE INDEX IF NOT EXISTS idx_reminders_patient ON medication_reminders(patient_id);
-CREATE INDEX IF NOT EXISTS idx_reminders_scheduled ON medication_reminders(scheduled_time);
+CREATE INDEX IF NOT EXISTS idx_reminders_date ON medication_reminders(scheduled_date);
 CREATE INDEX IF NOT EXISTS idx_reminders_status ON medication_reminders(status);
 
 -- ============================================
@@ -72,10 +73,16 @@ CREATE POLICY "Allow anon access" ON medications FOR ALL USING (true) WITH CHECK
 CREATE POLICY "Allow anon access" ON medication_reminders FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================
--- 5. SAMPLE DATA (for testing)
+-- 5. INITIAL DATA (Optional - can skip if adding via bot)
 -- ============================================
--- Example: Eric takes Metformin twice daily
+-- Uncomment to add initial medications:
+/*
 INSERT INTO medications (patient_id, name, dosage, instructions, reminder_times, created_by)
 VALUES 
-    ('706283824', 'Metformin', '500mg', 'Take with meals', ARRAY['08:00', '20:00'], '706283824'),
-    ('8483200452', 'Lisinopril', '10mg', 'Take in the morning', ARRAY['09:00'], '706283824');
+    ('706283824', 'Metformin', '1000mg', 'Take with meals', ARRAY['08:00', '20:00'], '706283824'),
+    ('706283824', 'Losartan', '50mg', 'For blood pressure', ARRAY['08:00'], '706283824'),
+    ('706283824', 'Atorvastatin', '20mg', 'For cholesterol - take at bedtime', ARRAY['21:00'], '706283824'),
+    ('8483200452', 'Metformin', '850mg', 'Take with breakfast and dinner', ARRAY['08:00', '19:00'], '706283824'),
+    ('8483200452', 'Amlodipine', '5mg', 'Take once daily in the morning', ARRAY['08:00'], '706283824'),
+    ('8483200452', 'Lisinopril', '10mg', 'Take once daily, can cause dizziness', ARRAY['08:00'], '706283824');
+*/
