@@ -4,9 +4,27 @@
       "id": "med-eric-001",
       "patient_id": "706283824",
       "name": "Metformin",
-      "dosage": "500mg",
+      "dosage": "1000mg",
       "instructions": "Take with meals",
       "reminder_times": ["08:00", "20:00"],
+      "active": true
+    },
+    {
+      "id": "med-eric-002",
+      "patient_id": "706283824",
+      "name": "Losartan",
+      "dosage": "50mg",
+      "instructions": "For blood pressure",
+      "reminder_times": ["08:00"],
+      "active": true
+    },
+    {
+      "id": "med-eric-003",
+      "patient_id": "706283824",
+      "name": "Atorvastatin",
+      "dosage": "20mg",
+      "instructions": "For cholesterol - take at bedtime",
+      "reminder_times": ["21:00"],
       "active": true
     },
     {
