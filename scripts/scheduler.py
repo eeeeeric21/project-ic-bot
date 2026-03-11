@@ -245,19 +245,31 @@ class CheckinScheduler:
             med_list = "\n".join([f"• {m.name} ({m.dosage}) - {', '.join(m.reminder_times)}" 
                                   for m in medications]) if medications else "No medications registered"
             
+            # Per-medication breakdown
+            med_breakdown = ""
+            if adherence.get('by_medication'):
+                med_breakdown = "\n\n*By Medication:*\n"
+                for med_name, stats in adherence['by_medication'].items():
+                    total = stats['taken'] + stats['skipped'] + stats['missed']
+                    if total > 0:
+                        taken_pct = (stats['taken'] / total * 100) if total > 0 else 0
+                        med_emoji = "✅" if taken_pct >= 80 else "⚠️" if taken_pct >= 50 else "❌"
+                        med_breakdown += f"\n{med_emoji} *{med_name}*\n"
+                        med_breakdown += f"  ✅ Taken: {stats['taken']} | ⏭️ Skipped: {stats['skipped']} | ❌ Missed: {stats['missed']}\n"
+            
             med_section = f"""
 ------------------------------------------------------------
 💊 *Medication Adherence*
 ------------------------------------------------------------
-{rate_emoji} *Adherence Rate: {rate}%*
+{rate_emoji} *Overall Adherence: {rate}%*
 
 *Registered Medications:*
 {med_list}
 
-*This Week:*
+*This Week's Summary:*
 • ✅ Taken: {adherence['taken']} doses
 • ⏭️ Skipped: {adherence['skipped']} doses
-• ❌ Missed: {adherence['missed']} doses
+• ❌ Missed: {adherence['missed']} doses{med_breakdown}
 """
         
         report = f"""📋 *Weekly Health Report*

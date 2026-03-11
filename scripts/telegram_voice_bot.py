@@ -696,12 +696,23 @@ async def adherence_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 *Patient:* {patient.name}
 *Period:* Last {report['period_days']} days
 
-{rate_emoji} *Adherence: {report['adherence_rate']}%*
+{rate_emoji} *Overall Adherence: {report['adherence_rate']}%*
 
 • ✅ Taken: {report['taken']}
 • ⏭️ Skipped: {report['skipped']}
 • ❌ Missed: {report['missed']}
 • 📋 Total doses: {report['total_doses']}"""
+    
+    # Add per-medication breakdown
+    if report.get('by_medication'):
+        msg += "\n\n*By Medication:*\n"
+        for med_name, stats in report['by_medication'].items():
+            total = stats['taken'] + stats['skipped'] + stats['missed']
+            if total > 0:
+                taken_pct = (stats['taken'] / total * 100) if total > 0 else 0
+                med_emoji = "✅" if taken_pct >= 80 else "⚠️" if taken_pct >= 50 else "❌"
+                msg += f"\n{med_emoji} {med_name}\n"
+                msg += f"  Taken: {stats['taken']} | Skipped: {stats['skipped']} | Missed: {stats['missed']}\n"
     
     await update.message.reply_text(msg, parse_mode='Markdown')
 

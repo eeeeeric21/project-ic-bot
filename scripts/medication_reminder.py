@@ -456,14 +456,32 @@ Please follow up with the patient.
         skipped = 0
         missed = 0
         
+        # Per-medication tracking
+        med_stats: Dict[str, Dict] = {}
+        
         for reminder in self.pending_reminders.values():
             if reminder.patient_id == patient_id:
+                # Get medication name
+                med_name = "Unknown"
+                for meds in self.medications.values():
+                    for med in meds:
+                        if med.id == reminder.medication_id:
+                            med_name = f"{med.name} ({med.dosage})" if med.dosage else med.name
+                            break
+                
+                # Initialize per-med stats
+                if med_name not in med_stats:
+                    med_stats[med_name] = {"taken": 0, "skipped": 0, "missed": 0}
+                
                 if reminder.status == "taken":
                     taken += 1
+                    med_stats[med_name]["taken"] += 1
                 elif reminder.status == "skipped":
                     skipped += 1
+                    med_stats[med_name]["skipped"] += 1
                 elif reminder.status == "missed":
                     missed += 1
+                    med_stats[med_name]["missed"] += 1
         
         total = taken + skipped + missed
         adherence_rate = (taken / total * 100) if total > 0 else 0
@@ -475,7 +493,8 @@ Please follow up with the patient.
             "taken": taken,
             "skipped": skipped,
             "missed": missed,
-            "adherence_rate": round(adherence_rate, 1)
+            "adherence_rate": round(adherence_rate, 1),
+            "by_medication": med_stats
         }
 
 
