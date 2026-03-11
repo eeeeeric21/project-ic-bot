@@ -353,6 +353,229 @@ Continue chatting or use /end to finish."""
     await update.message.reply_text(status_msg, parse_mode='Markdown')
 
 
+# ============================================
+# MEDICATION COMMANDS (for Case Workers)
+# ============================================
+
+# Store pending medication additions for confirmation
+pending_medications: Dict[str, Dict] = {}
+
+
+async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /addmed command to add medication for a patient.
+    
+    Usage: /addmed <patient_id> <name> <dosage> <times>
+    Example: /addmed 706283824 Metformin 500mg 08:00,20:00
+    """
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Only allow case workers
+    if telegram_id != CASE_WORKER_CHAT_ID:
+        await update.message.reply_text("⚠️ This command is for case workers only.")
+        return
+    
+    if not context.args or len(context.args) < 4:
+        await update.message.reply_text(
+            "💊 *Add Medication*\n\n"
+            "Usage: `/addmed <patient_id> <name> <dosage> <times>`\n\n"
+            "Example: `/addmed 706283824 Metformin 500mg 08:00,20:00`\n\n"
+            "Times should be comma-separated (24-hour format).",
+            parse_mode='Markdown'
+        )
+        return
+    
+    patient_id = context.args[0]
+    med_name = context.args[1]
+    dosage = context.args[2]
+    times_str = context.args[3]
+    instructions = " ".join(context.args[4:]) if len(context.args) > 4 else ""
+    
+    # Parse times
+    times = [t.strip() for t in times_str.split(',')]
+    
+    # Validate times
+    for t in times:
+        try:
+            hour, minute = map(int, t.split(':'))
+            if not (0 <= hour < 24 and 0 <= minute < 60):
+                raise ValueError()
+        except:
+            await update.message.reply_text(f"⚠️ Invalid time format: {t}. Use HH:MM format.")
+            return
+    
+    # Get patient name if available
+    patient_name = patient_id
+    if patient_id in scheduler.patients:
+        patient_name = f"{scheduler.patients[patient_id].name} ({patient_id})"
+    
+    # Show confirmation message with inline buttons
+    confirmation_msg = f"""💊 *Confirm Add Medication?*
+
+*Patient:* {patient_name}
+*Medication:* {med_name}
+*Dosage:* {dosage}
+*Reminder times:* {', '.join(times)}"""
+    
+    if instructions:
+        confirmation_msg += f"\n*Instructions:* {instructions}"
+    
+    # Create inline keyboard
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm:{patient_id}:{med_name}:{dosage}:{times_str}"),
+            InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        confirmation_msg,
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+
+
+async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle medication confirmation callback."""
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_id = str(query.from_user.id)
+    
+    # Only allow case workers
+    if telegram_id != CASE_WORKER_CHAT_ID:
+        await query.edit_message_text("⚠️ This action is for case workers only.")
+        return
+    
+    data = query.data
+    
+    if data == "addmed_cancel":
+        await query.edit_message_text("❌ *Cancelled*\n\nMedication was not added.", parse_mode='Markdown')
+        return
+    
+    if data.startswith("addmed_confirm:"):
+        # Parse callback data
+        parts = data.split(":")
+        if len(parts) >= 5:
+            patient_id = parts[1]
+            med_name = parts[2]
+            dosage = parts[3]
+            times_str = parts[4]
+            times = [t.strip() for t in times_str.split(',')]
+            
+            # Add medication
+            if scheduler.medication_manager:
+                medication = scheduler.medication_manager.add_medication(
+                    patient_id, med_name, dosage, "", times
+                )
+                
+                # Get patient name
+                patient_name = patient_id
+                if patient_id in scheduler.patients:
+                    patient_name = scheduler.patients[patient_id].name
+                
+                await query.edit_message_text(
+                    f"✅ *Medication Added Successfully!*\n\n"
+                    f"• Patient: {patient_name}\n"
+                    f"• Medication: {med_name} ({dosage})\n"
+                    f"• Reminder times: {', '.join(times)}\n\n"
+                    f"The patient will receive reminders at the scheduled times.",
+                    parse_mode='Markdown'
+                )
+            else:
+                await query.edit_message_text(
+                    "⚠️ Medication system not available.",
+                    parse_mode='Markdown'
+                )
+        else:
+            await query.edit_message_text("⚠️ Invalid confirmation data.", parse_mode='Markdown')
+    else:
+        await update.message.reply_text("⚠️ Medication system not available.")
+
+
+async def listmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /listmed command to list medications for a patient.
+    
+    Usage: /listmed <patient_id>
+    """
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Allow patients to see their own meds, or case workers to see any
+    patient_id = context.args[0] if context.args else telegram_id
+    
+    if telegram_id != CASE_WORKER_CHAT_ID and patient_id != telegram_id:
+        await update.message.reply_text("⚠️ You can only view your own medications.")
+        return
+    
+    if not scheduler.medication_manager:
+        await update.message.reply_text("⚠️ Medication system not available.")
+        return
+    
+    medications = scheduler.medication_manager.medications.get(patient_id, [])
+    
+    if not medications:
+        await update.message.reply_text("📋 No medications registered.")
+        return
+    
+    msg = "💊 *Medications*\n\n"
+    for med in medications:
+        status = "✅" if med.active else "❌"
+        msg += f"{status} {med.name} ({med.dosage})\n"
+        msg += f"   ⏰ {', '.join(med.reminder_times)}\n"
+        if med.instructions:
+            msg += f"   📝 {med.instructions}\n"
+    
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+
+async def adherence_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /adherence command to view medication adherence.
+    
+    Usage: /adherence <patient_id>
+    """
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Only allow case workers
+    if telegram_id != CASE_WORKER_CHAT_ID:
+        await update.message.reply_text("⚠️ This command is for case workers only.")
+        return
+    
+    patient_id = context.args[0] if context.args else None
+    
+    if not patient_id:
+        await update.message.reply_text("Usage: /adherence <patient_id>")
+        return
+    
+    if not scheduler.medication_manager:
+        await update.message.reply_text("⚠️ Medication system not available.")
+        return
+    
+    report = await scheduler.medication_manager.get_adherence_report(patient_id)
+    
+    rate_emoji = "🟢" if report['adherence_rate'] >= 80 else "🟡" if report['adherence_rate'] >= 50 else "🔴"
+    
+    msg = f"""📊 *Medication Adherence Report*
+
+*Patient:* {patient_id}
+*Period:* Last {report['period_days']} days
+
+{rate_emoji} *Adherence: {report['adherence_rate']}%*
+
+• ✅ Taken: {report['taken']}
+• ⏭️ Skipped: {report['skipped']}
+• ❌ Missed: {report['missed']}
+• 📋 Total doses: {report['total_doses']}"""
+    
+    await update.message.reply_text(msg, parse_mode='Markdown')
+
+
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle voice messages."""
     user = update.effective_user
@@ -407,6 +630,26 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
     # Check for wake words
     text_lower = text.lower().strip()
     is_wake_word = any(wake in text_lower for wake in WAKE_WORDS)
+    
+    # === MEDICATION RESPONSE HANDLING ===
+    # Check if this is a response to a medication reminder
+    if scheduler.medication_manager and scheduler.medication_manager.pending_reminders:
+        for reminder_id, reminder in scheduler.medication_manager.pending_reminders.items():
+            if reminder.patient_id == telegram_id and reminder.status == "pending":
+                if text_lower in ["taken", "ok", "yes", "done", "took it"]:
+                    scheduler.medication_manager.mark_taken(telegram_id, reminder_id)
+                    await update.message.reply_text(
+                        "✅ *Recorded!*\n\nGreat job staying on top of your medication! 💙",
+                        parse_mode='Markdown'
+                    )
+                    return
+                elif text_lower in ["skip", "skipped", "no", "missed"]:
+                    scheduler.medication_manager.mark_skipped(telegram_id, "", reminder_id)
+                    await update.message.reply_text(
+                        "📝 *Noted*\n\nIf you're feeling unwell, please let me know. Take care! 💙",
+                        parse_mode='Markdown'
+                    )
+                    return
     
     if is_wake_word:
         # Start a fresh check-in session
@@ -537,6 +780,12 @@ def setup_bot():
     logger.info(f"Case Worker ID: {CASE_WORKER_CHAT_ID}")
     logger.info(f"MERaLiON API: {MERALION_API_URL}")
     logger.info(f"Registered Patients: {len(scheduler.patients)}")
+    
+    # Log medication info
+    if scheduler.medication_manager:
+        med_count = sum(len(meds) for meds in scheduler.medication_manager.medications.values())
+        logger.info(f"Medication Reminders: {med_count} medications")
+    
     logger.info("=" * 60)
     
     # Create application
@@ -546,6 +795,16 @@ def setup_bot():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("end", end_command))
     application.add_handler(CommandHandler("status", status_command))
+    
+    # Medication commands
+    application.add_handler(CommandHandler("addmed", addmed_command))
+    application.add_handler(CommandHandler("listmed", listmed_command))
+    application.add_handler(CommandHandler("adherence", adherence_command))
+    
+    # Medication callback handler (for confirmation buttons)
+    from telegram.ext import CallbackQueryHandler
+    application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
+    
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
@@ -583,6 +842,11 @@ def main():
     print("  • Afternoon: 2:00 PM 🌤️")
     print(f"  • Registered Patients: {len(scheduler.patients)}")
     print("=" * 60)
+    print("\n💊 Medication Commands (Case Workers):")
+    print("  • /addmed <patient_id> <name> <dosage> <times>")
+    print("  • /listmed [patient_id]")
+    print("  • /adherence <patient_id>")
+    print("=" * 60)
     print("\n🗣️ Wake Words (start check-in by saying):")
     print("  • 'Hello Aescul Helper'")
     print("  • 'Hello AesculAI'")
@@ -598,6 +862,16 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("end", end_command))
     application.add_handler(CommandHandler("status", status_command))
+    
+    # Medication commands
+    application.add_handler(CommandHandler("addmed", addmed_command))
+    application.add_handler(CommandHandler("listmed", listmed_command))
+    application.add_handler(CommandHandler("adherence", adherence_command))
+    
+    # Medication callback handler (for confirmation buttons)
+    from telegram.ext import CallbackQueryHandler
+    application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
+    
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     

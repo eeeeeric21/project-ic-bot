@@ -1,0 +1,22 @@
+{
+  "medications": [
+    {
+      "id": "med-eric-001",
+      "patient_id": "706283824",
+      "name": "Metformin",
+      "dosage": "500mg",
+      "instructions": "Take with meals",
+      "reminder_times": ["08:00", "20:00"],
+      "active": true
+    },
+    {
+      "id": "med-luyang-001",
+      "patient_id": "8483200452",
+      "name": "Lisinopril",
+      "dosage": "10mg",
+      "instructions": "Take in the morning",
+      "reminder_times": ["09:00"],
+      "active": true
+    }
+  ]
+}

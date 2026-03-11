@@ -25,9 +25,20 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 import aiohttp
 
+# Add paths
+sys.path.insert(0, str(Path(__file__).parent))
+
 # Load environment
 env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
+
+# Import medication reminder module
+try:
+    from medication_reminder import MedicationManager, REMINDER_FOLLOWUP_MINUTES, MISSED_ALERT_MINUTES
+    MEDICATION_MODULE_AVAILABLE = True
+except ImportError:
+    MEDICATION_MODULE_AVAILABLE = False
+    logger.warning("Medication reminder module not available")
 
 # Configure logging
 logging.basicConfig(
@@ -72,6 +83,11 @@ class CheckinScheduler:
         self.completed_today: Dict[str, Dict] = {}
         self.bot_token = BOT_TOKEN
         self.running = False
+        
+        # Medication reminder system
+        self.medication_manager: Optional[MedicationManager] = None
+        if MEDICATION_MODULE_AVAILABLE:
+            self.medication_manager = MedicationManager()
         
     def load_patients(self):
         """Load registered patients from database or config."""
@@ -313,6 +329,10 @@ _Generated automatically by Project IC_
         last_date = datetime.now(SG_TIMEZONE).date()
         weekly_report_sent = False
         
+        # Load medications
+        if self.medication_manager:
+            await self.medication_manager.load_medications()
+        
         logger.info("=" * 60)
         logger.info("🗓️ Check-in Scheduler Started (Singapore Time)")
         logger.info(f"Morning check-in: {MORNING_TIME.strftime('%H:%M')}")
@@ -320,6 +340,12 @@ _Generated automatically by Project IC_
         logger.info(f"Evening check-in: {EVENING_TIME.strftime('%H:%M')}")
         logger.info(f"Weekly report: Sunday {WEEKLY_REPORT_TIME.strftime('%H:%M')}")
         logger.info(f"Monitoring {len(self.patients)} patients")
+        
+        # Log medication info
+        if self.medication_manager:
+            med_count = sum(len(meds) for meds in self.medication_manager.medications.values())
+            logger.info(f"💊 Medication reminders: {med_count} medications")
+        
         logger.info(f"Current SG time: {datetime.now(SG_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
         
@@ -331,6 +357,14 @@ _Generated automatically by Project IC_
                 self.reset_daily()
                 last_date = now.date()
                 weekly_report_sent = False  # Reset weekly flag
+                
+                # Reload medications daily
+                if self.medication_manager:
+                    await self.medication_manager.load_medications()
+            
+            # === MEDICATION REMINDERS ===
+            if self.medication_manager:
+                await self._process_medication_reminders()
             
             # Check for morning check-in time
             if self.should_send_checkin("morning"):
@@ -368,6 +402,59 @@ _Generated automatically by Project IC_
             
             # Sleep for 1 minute before next check
             await asyncio.sleep(60)
+    
+    async def _process_medication_reminders(self):
+        """Process medication reminders, follow-ups, and missed alerts."""
+        if not self.medication_manager:
+            return
+        
+        now = datetime.now(SG_TIMEZONE)
+        
+        # Check for scheduled medication reminders
+        for patient_id, medications in self.medication_manager.medications.items():
+            for medication in medications:
+                for time_str in medication.reminder_times:
+                    if self.medication_manager.should_send_reminder(time_str):
+                        # Check if already sent today
+                        reminder_key = f"{patient_id}-{medication.id}-{now.strftime('%Y%m%d')}-{time_str.replace(':', '')}"
+                        
+                        if reminder_key not in self.medication_manager.pending_reminders:
+                            logger.info(f"💊 Sending medication reminder: {medication.name} to {patient_id} at {time_str}")
+                            await self.medication_manager.send_reminder(patient_id, medication, time_str)
+                            await asyncio.sleep(2)
+        
+        # Check for follow-ups and missed medications
+        for reminder_id, reminder in list(self.medication_manager.pending_reminders.items()):
+            if reminder.status != "pending":
+                continue
+            
+            elapsed = (now - reminder.scheduled_time).total_seconds() / 60
+            
+            # Get medication info
+            medication = None
+            for meds in self.medication_manager.medications.values():
+                for med in meds:
+                    if med.id == reminder.medication_id:
+                        medication = med
+                        break
+            
+            if not medication:
+                continue
+            
+            # Follow-up after REMINDER_FOLLOWUP_MINUTES
+            if elapsed >= REMINDER_FOLLOWUP_MINUTES and elapsed < REMINDER_FOLLOWUP_MINUTES + 1:
+                logger.info(f"💊 Sending follow-up for {medication.name} to {reminder.patient_id}")
+                await self.medication_manager.send_followup(reminder, medication)
+            
+            # Mark as missed and alert case worker after MISSED_ALERT_MINUTES
+            if elapsed >= MISSED_ALERT_MINUTES and elapsed < MISSED_ALERT_MINUTES + 1:
+                logger.info(f"⚠️ Marking medication as missed: {medication.name} for {reminder.patient_id}")
+                reminder.status = "missed"
+                
+                # Alert case worker
+                patient = self.patients.get(reminder.patient_id)
+                if patient and patient.case_worker_id:
+                    await self.medication_manager.send_missed_alert(reminder, medication, patient.case_worker_id)
     
     def stop(self):
         """Stop the scheduler."""
