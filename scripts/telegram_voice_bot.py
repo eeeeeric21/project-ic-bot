@@ -629,7 +629,21 @@ async def adherence_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     patient_id = context.args[0] if context.args else None
     
     if not patient_id:
-        await update.message.reply_text("Usage: /adherence <patient_id>")
+        await update.message.reply_text("Usage: /adherence <patient_name>")
+        return
+    
+    # Look up patient by name
+    patient = scheduler.patients.get(patient_id)
+    if not patient:
+        # Try name search
+        for tid, p in scheduler.patients.items():
+            if patient_id.lower() in p.name.lower() or patient_id.lower() in p.preferred_name.lower():
+                patient = p
+                patient_id = tid
+                break
+    
+    if not patient:
+        await update.message.reply_text(f"⚠️ Patient \"{patient_id}\" not found.")
         return
     
     if not scheduler.medication_manager:
@@ -642,7 +656,7 @@ async def adherence_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     msg = f"""📊 *Medication Adherence Report*
 
-*Patient:* {patient_id}
+*Patient:* {patient.name}
 *Period:* Last {report['period_days']} days
 
 {rate_emoji} *Adherence: {report['adherence_rate']}%*
@@ -653,6 +667,146 @@ async def adherence_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • 📋 Total doses: {report['total_doses']}"""
     
     await update.message.reply_text(msg, parse_mode='Markdown')
+
+
+async def delmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /delmed command to delete a medication.
+    
+    Usage: /delmed <patient_name> <medication_name>
+    """
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Only allow case workers
+    if telegram_id != CASE_WORKER_CHAT_ID:
+        await update.message.reply_text("⚠️ This command is for case workers only.")
+        return
+    
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text(
+            "🗑️ *Delete Medication*\n\n"
+            "Usage: `/delmed <patient_name> <medication_name>`\n\n"
+            "Example: `/delmed Eric Metformin`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    patient_identifier = context.args[0]
+    med_name = " ".join(context.args[1:])
+    
+    # Look up patient
+    patient = None
+    patient_id = None
+    
+    if patient_identifier in scheduler.patients:
+        patient = scheduler.patients[patient_identifier]
+        patient_id = patient_identifier
+    else:
+        for tid, p in scheduler.patients.items():
+            if patient_identifier.lower() in p.name.lower() or patient_identifier.lower() in p.preferred_name.lower():
+                patient_id = tid
+                patient = p
+                break
+    
+    if not patient:
+        await update.message.reply_text(f"⚠️ Patient \"{patient_identifier}\" not found.")
+        return
+    
+    if not scheduler.medication_manager:
+        await update.message.reply_text("⚠️ Medication system not available.")
+        return
+    
+    # Find medications matching the name
+    medications = scheduler.medication_manager.medications.get(patient_id, [])
+    matching = [m for m in medications if med_name.lower() in m.name.lower()]
+    
+    if not matching:
+        await update.message.reply_text(
+            f"⚠️ No medication matching \"{med_name}\" found for {patient.name}.\n\n"
+            f"Use `/listmed {patient.name}` to see all medications.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    if len(matching) == 1:
+        # Single match - show confirmation
+        med = matching[0]
+        keyboard = [[
+            InlineKeyboardButton("🗑️ Delete", callback_data=f"delmed_confirm:{patient_id}:{med.id}"),
+            InlineKeyboardButton("❌ Cancel", callback_data="delmed_cancel")
+        ]]
+        
+        await update.message.reply_text(
+            f"🗑️ *Delete Medication?*\n\n"
+            f"*Patient:* {patient.name}\n"
+            f"*Medication:* {med.name} ({med.dosage})\n"
+            f"*Times:* {', '.join(med.reminder_times)}\n\n"
+            f"⚠️ This cannot be undone.",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        # Multiple matches - show selection
+        keyboard = []
+        for med in matching:
+            keyboard.append([InlineKeyboardButton(
+                f"{med.name} ({med.dosage}) - {', '.join(med.reminder_times)}",
+                callback_data=f"delmed_confirm:{patient_id}:{med.id}"
+            )])
+        keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="delmed_cancel")])
+        
+        await update.message.reply_text(
+            f"🗑️ *Select medication to delete:*\n\n"
+            f"Patient: {patient.name}",
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+
+async def delmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle medication deletion callback."""
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_id = str(query.from_user.id)
+    
+    if telegram_id != CASE_WORKER_CHAT_ID:
+        await query.edit_message_text("⚠️ This action is for case workers only.")
+        return
+    
+    data = query.data
+    
+    if data == "delmed_cancel":
+        await query.edit_message_text("❌ *Cancelled*\n\nMedication was not deleted.", parse_mode='Markdown')
+        return
+    
+    if data.startswith("delmed_confirm:"):
+        parts = data.split(":")
+        if len(parts) >= 3:
+            patient_id = parts[1]
+            med_id = parts[2]
+            
+            # Delete medication
+            if scheduler.medication_manager:
+                medications = scheduler.medication_manager.medications.get(patient_id, [])
+                for i, med in enumerate(medications):
+                    if med.id == med_id:
+                        deleted_med = medications.pop(i)
+                        scheduler.medication_manager._save_medications_to_file()
+                        
+                        await query.edit_message_text(
+                            f"✅ *Medication Deleted*\n\n"
+                            f"• {deleted_med.name} ({deleted_med.dosage})\n"
+                            f"• Removed from {patient_id}'s schedule",
+                            parse_mode='Markdown'
+                        )
+                        return
+                
+                await query.edit_message_text("⚠️ Medication not found.", parse_mode='Markdown')
+            else:
+                await query.edit_message_text("⚠️ Medication system not available.", parse_mode='Markdown')
 
 
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -877,12 +1031,14 @@ def setup_bot():
     
     # Medication commands
     application.add_handler(CommandHandler("addmed", addmed_command))
+    application.add_handler(CommandHandler("delmed", delmed_command))
     application.add_handler(CommandHandler("listmed", listmed_command))
     application.add_handler(CommandHandler("adherence", adherence_command))
     
     # Medication callback handler (for confirmation buttons)
     from telegram.ext import CallbackQueryHandler
     application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
+    application.add_handler(CallbackQueryHandler(delmed_callback, pattern="^delmed_"))
     
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
@@ -944,12 +1100,14 @@ def main():
     
     # Medication commands
     application.add_handler(CommandHandler("addmed", addmed_command))
+    application.add_handler(CommandHandler("delmed", delmed_command))
     application.add_handler(CommandHandler("listmed", listmed_command))
     application.add_handler(CommandHandler("adherence", adherence_command))
     
     # Medication callback handler (for confirmation buttons)
     from telegram.ext import CallbackQueryHandler
     application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
+    application.add_handler(CallbackQueryHandler(delmed_callback, pattern="^delmed_"))
     
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
