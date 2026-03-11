@@ -417,7 +417,7 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard.append([
                     InlineKeyboardButton(
                         f"{p.name} ({p.preferred_name})",
-                        callback_data=f"addmed_select:{tid}:{med_name}:{dosage}:{times_str}"
+                        callback_data=f"addmed_select|{tid}|{med_name}|{dosage}|{times_str}"
                     )
                 ])
             keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")])
@@ -465,7 +465,7 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Create inline keyboard
     keyboard = [
         [
-            InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm:{patient_id}:{med_name}:{dosage}:{times_str}"),
+            InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm|{patient_id}|{med_name}|{dosage}|{times_str}"),
             InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")
         ]
     ]
@@ -499,9 +499,9 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # Handle patient selection from multiple matches
-    if data.startswith("addmed_select:"):
-        # Parse: addmed_select:patient_id:med_name:dosage:times
-        parts = data.split(":")
+    if data.startswith("addmed_select|"):
+        # Parse: addmed_select|patient_id|med_name|dosage|times
+        parts = data.split("|")
         if len(parts) >= 5:
             patient_id = parts[1]
             med_name = parts[2]
@@ -525,7 +525,7 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             keyboard = [
                 [
-                    InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm:{patient_id}:{med_name}:{dosage}:{times_str}"),
+                    InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm|{patient_id}|{med_name}|{dosage}|{times_str}"),
                     InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")
                 ]
             ]
@@ -537,9 +537,9 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
     
-    if data.startswith("addmed_confirm:"):
-        # Parse callback data
-        parts = data.split(":")
+    if data.startswith("addmed_confirm|"):
+        # Parse callback data (using | as separator to handle colons in times)
+        parts = data.split("|")
         if len(parts) >= 5:
             patient_id = parts[1]
             med_name = parts[2]
@@ -763,7 +763,7 @@ async def delmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Single match - show confirmation
         med = matching[0]
         keyboard = [[
-            InlineKeyboardButton("🗑️ Delete", callback_data=f"delmed_confirm:{patient_id}:{med.id}"),
+            InlineKeyboardButton("🗑️ Delete", callback_data=f"delmed_confirm|{patient_id}|{med.id}"),
             InlineKeyboardButton("❌ Cancel", callback_data="delmed_cancel")
         ]]
         
@@ -782,7 +782,7 @@ async def delmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for med in matching:
             keyboard.append([InlineKeyboardButton(
                 f"{med.name} ({med.dosage}) - {', '.join(med.reminder_times)}",
-                callback_data=f"delmed_confirm:{patient_id}:{med.id}"
+                callback_data=f"delmed_confirm|{patient_id}|{med.id}"
             )])
         keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="delmed_cancel")])
         
@@ -811,8 +811,8 @@ async def delmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ *Cancelled*\n\nMedication was not deleted.", parse_mode='Markdown')
         return
     
-    if data.startswith("delmed_confirm:"):
-        parts = data.split(":")
+    if data.startswith("delmed_confirm|"):
+        parts = data.split("|")
         if len(parts) >= 3:
             patient_id = parts[1]
             med_id = parts[2]
