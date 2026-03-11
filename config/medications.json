@@ -12,10 +12,28 @@
     {
       "id": "med-luyang-001",
       "patient_id": "8483200452",
+      "name": "Metformin",
+      "dosage": "850mg",
+      "instructions": "Take with breakfast and dinner",
+      "reminder_times": ["08:00", "19:00"],
+      "active": true
+    },
+    {
+      "id": "med-luyang-002",
+      "patient_id": "8483200452",
+      "name": "Amlodipine",
+      "dosage": "5mg",
+      "instructions": "Take once daily in the morning",
+      "reminder_times": ["08:00"],
+      "active": true
+    },
+    {
+      "id": "med-luyang-003",
+      "patient_id": "8483200452",
       "name": "Lisinopril",
       "dosage": "10mg",
-      "instructions": "Take in the morning",
-      "reminder_times": ["09:00"],
+      "instructions": "Take once daily, can cause dizziness - rise slowly from bed",
+      "reminder_times": ["08:00"],
       "active": true
     }
   ]
