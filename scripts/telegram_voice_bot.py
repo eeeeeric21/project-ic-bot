@@ -51,6 +51,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global scheduler instance (set by bot_server.py)
+scheduler: CheckinScheduler = None
+
+def set_scheduler(s: CheckinScheduler):
+    """Set the scheduler instance (called from bot_server.py)."""
+    global scheduler
+    scheduler = s
+
 # Environment variables
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CASE_WORKER_CHAT_ID = os.environ.get("TELEGRAM_CASE_WORKER_CHAT_ID")
@@ -908,10 +916,10 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # === MEDICATION RESPONSE HANDLING ===
     # Check if this is a response to a medication reminder
-    if scheduler.medication_manager and scheduler.medication_manager.pending_reminders:
-        for reminder_id, reminder in scheduler.medication_manager.pending_reminders.items():
+    if scheduler and scheduler.medication_manager:
+        for reminder_id, reminder in list(scheduler.medication_manager.pending_reminders.items()):
             if reminder.patient_id == telegram_id and reminder.status == "pending":
-                if text_lower in ["taken", "ok", "yes", "done", "took it"]:
+                if text_lower in ["taken", "ok", "yes", "done", "took it", "took"]:
                     scheduler.medication_manager.mark_taken(telegram_id, reminder_id)
                     await update.message.reply_text(
                         "✅ *Recorded!*\n\nGreat job staying on top of your medication! 💙",
@@ -1044,9 +1052,10 @@ def setup_bot():
     if not BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN not set!")
     
-    # Initialize scheduler and load patients
-    scheduler = CheckinScheduler()
-    scheduler.load_patients()
+    # Only create scheduler if not already set (by bot_server.py)
+    if scheduler is None:
+        scheduler = CheckinScheduler()
+        scheduler.load_patients()
     
     logger.info("=" * 60)
     logger.info("🏥 PROJECT IC - Telegram Voice Bot")

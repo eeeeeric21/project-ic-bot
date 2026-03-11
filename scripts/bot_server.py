@@ -34,7 +34,7 @@ try:
 except:
     pass
 
-from telegram_voice_bot import setup_bot
+from telegram_voice_bot import setup_bot, set_scheduler
 from scheduler import CheckinScheduler
 
 # Environment variables
@@ -140,6 +140,10 @@ async def main():
     # Start the check-in scheduler in background
     scheduler = CheckinScheduler()
     scheduler.load_patients()
+    
+    # Share scheduler with telegram_voice_bot module
+    set_scheduler(scheduler)
+    
     asyncio.create_task(scheduler.run_scheduler())
     logger.info("Check-in scheduler started (8 AM, 2 PM, 8 PM, weekly reports)")
     
