@@ -231,15 +231,40 @@ class CheckinScheduler:
     
     async def _generate_patient_report(self, patient: Patient) -> str:
         """Generate weekly report for a patient."""
-        # Simple demo report (in production, fetch from database)
         end_date = datetime.now(SG_TIMEZONE)
         start_date = end_date - timedelta(days=7)
+        
+        # Get medication adherence if available
+        med_section = ""
+        if self.medication_manager:
+            adherence = await self.medication_manager.get_adherence_report(patient.telegram_id, days=7)
+            rate = adherence['adherence_rate']
+            rate_emoji = "🟢" if rate >= 80 else "🟡" if rate >= 50 else "🔴"
+            
+            medications = self.medication_manager.medications.get(patient.telegram_id, [])
+            med_list = "\n".join([f"• {m.name} ({m.dosage}) - {', '.join(m.reminder_times)}" 
+                                  for m in medications]) if medications else "No medications registered"
+            
+            med_section = f"""
+------------------------------------------------------------
+💊 *Medication Adherence*
+------------------------------------------------------------
+{rate_emoji} *Adherence Rate: {rate}%*
+
+*Registered Medications:*
+{med_list}
+
+*This Week:*
+• ✅ Taken: {adherence['taken']} doses
+• ⏭️ Skipped: {adherence['skipped']} doses
+• ❌ Missed: {adherence['missed']} doses
+"""
         
         report = f"""📋 *Weekly Health Report*
 
 *Patient:* {patient.name}
 *Period:* {start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}
-
+{med_section}
 ------------------------------------------------------------
 📊 *Check-in Summary*
 ------------------------------------------------------------
@@ -257,7 +282,7 @@ class CheckinScheduler:
 ------------------------------------------------------------
 🔍 *Health Signals*
 ------------------------------------------------------------
-• Pain reported: 2 times
+• Pain reported: 0 times
 • Distress: 0 times
 • Cognitive concerns: 0 times
 
