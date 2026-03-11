@@ -364,8 +364,8 @@ pending_medications: Dict[str, Dict] = {}
 async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /addmed command to add medication for a patient.
     
-    Usage: /addmed <patient_id> <name> <dosage> <times>
-    Example: /addmed 706283824 Metformin 500mg 08:00,20:00
+    Usage: /addmed <patient_name> <name> <dosage> <times>
+    Example: /addmed Eric Metformin 500mg 08:00,20:00
     """
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     
@@ -380,18 +380,63 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args or len(context.args) < 4:
         await update.message.reply_text(
             "💊 *Add Medication*\n\n"
-            "Usage: `/addmed <patient_id> <name> <dosage> <times>`\n\n"
-            "Example: `/addmed 706283824 Metformin 500mg 08:00,20:00`\n\n"
+            "Usage: `/addmed <patient_name> <med_name> <dosage> <times>`\n\n"
+            "Example: `/addmed Eric Metformin 500mg 08:00,20:00`\n\n"
             "Times should be comma-separated (24-hour format).",
             parse_mode='Markdown'
         )
         return
     
-    patient_id = context.args[0]
+    patient_identifier = context.args[0]
     med_name = context.args[1]
     dosage = context.args[2]
     times_str = context.args[3]
     instructions = " ".join(context.args[4:]) if len(context.args) > 4 else ""
+    
+    # Look up patient by name or ID
+    patient = None
+    patient_id = None
+    
+    # First try exact ID match
+    if patient_identifier in scheduler.patients:
+        patient = scheduler.patients[patient_identifier]
+        patient_id = patient_identifier
+    else:
+        # Search by name (case-insensitive)
+        matches = []
+        for tid, p in scheduler.patients.items():
+            if patient_identifier.lower() in p.name.lower() or patient_identifier.lower() in p.preferred_name.lower():
+                matches.append((tid, p))
+        
+        if len(matches) == 1:
+            patient_id, patient = matches[0]
+        elif len(matches) > 1:
+            # Multiple matches - show selection
+            keyboard = []
+            for tid, p in matches:
+                keyboard.append([
+                    InlineKeyboardButton(
+                        f"{p.name} ({p.preferred_name})",
+                        callback_data=f"addmed_select:{tid}:{med_name}:{dosage}:{times_str}"
+                    )
+                ])
+            keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")])
+            
+            await update.message.reply_text(
+                f"👥 *Multiple patients match \"{patient_identifier}\"*\n\nPlease select:",
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+        else:
+            # No match found
+            await update.message.reply_text(
+                f"⚠️ Patient \"{patient_identifier}\" not found.\n\n"
+                f"Registered patients:\n"
+                + "\n".join(f"• {p.name} ({p.preferred_name})" for p in scheduler.patients.values()),
+                parse_mode='Markdown'
+            )
+            return
     
     # Parse times
     times = [t.strip() for t in times_str.split(',')]
@@ -406,15 +451,10 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"⚠️ Invalid time format: {t}. Use HH:MM format.")
             return
     
-    # Get patient name if available
-    patient_name = patient_id
-    if patient_id in scheduler.patients:
-        patient_name = f"{scheduler.patients[patient_id].name} ({patient_id})"
-    
     # Show confirmation message with inline buttons
     confirmation_msg = f"""💊 *Confirm Add Medication?*
 
-*Patient:* {patient_name}
+*Patient:* {patient.name} ({patient.preferred_name})
 *Medication:* {med_name}
 *Dosage:* {dosage}
 *Reminder times:* {', '.join(times)}"""
@@ -456,6 +496,45 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if data == "addmed_cancel":
         await query.edit_message_text("❌ *Cancelled*\n\nMedication was not added.", parse_mode='Markdown')
+        return
+    
+    # Handle patient selection from multiple matches
+    if data.startswith("addmed_select:"):
+        # Parse: addmed_select:patient_id:med_name:dosage:times
+        parts = data.split(":")
+        if len(parts) >= 5:
+            patient_id = parts[1]
+            med_name = parts[2]
+            dosage = parts[3]
+            times_str = parts[4]
+            times = [t.strip() for t in times_str.split(',')]
+            
+            # Get patient info
+            patient = scheduler.patients.get(patient_id)
+            if not patient:
+                await query.edit_message_text("⚠️ Patient not found.", parse_mode='Markdown')
+                return
+            
+            # Show confirmation
+            confirmation_msg = f"""💊 *Confirm Add Medication?*
+
+*Patient:* {patient.name} ({patient.preferred_name})
+*Medication:* {med_name}
+*Dosage:* {dosage}
+*Reminder times:* {', '.join(times)}"""
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm:{patient_id}:{med_name}:{dosage}:{times_str}"),
+                    InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")
+                ]
+            ]
+            
+            await query.edit_message_text(
+                confirmation_msg,
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         return
     
     if data.startswith("addmed_confirm:"):
