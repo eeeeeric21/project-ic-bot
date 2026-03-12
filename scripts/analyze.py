@@ -50,6 +50,9 @@ RED_FLAG_KEYWORDS = [
     "fell down", "i fell", "can't get up", "fallen", "broken", "fracture",
     "want to die", "kill myself", "end it all", "suicide", "hurt myself",
     "emergency", "help me now", "dying", "passed out", "unconscious",
+    # Added more red flags
+    "need help", "need help now", "very painful", "super painful", "extreme pain",
+    "can't move", "cannot move", "severe pain", "worst pain",
 ]
 
 POSITIVE_KEYWORDS = [
