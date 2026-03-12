@@ -608,6 +608,9 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(parts) >= 2:
             pending_key = parts[1]
             
+            logger.info(f"[addmed_confirm] Looking for pending_key={pending_key}")
+            logger.info(f"[addmed_confirm] Available keys: {list(pending_medications.keys())}")
+            
             # Retrieve pending medication data
             pending_data = pending_medications.get(pending_key)
             if not pending_data:
