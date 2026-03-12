@@ -797,6 +797,57 @@ async def adherence_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode='Markdown')
 
 
+async def weeklyreport_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /weeklyreport command to generate and send a test weekly report.
+    
+    Usage: /weeklyreport <patient_name>
+    """
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Only allow case workers
+    if telegram_id != CASE_WORKER_CHAT_ID:
+        await update.message.reply_text("⚠️ This command is for case workers only.")
+        return
+    
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text(
+            "📋 *Weekly Report*\n\n"
+            "Usage: `/weeklyreport <patient_name>`\n\n"
+            "Example: `/weeklyreport Eric`",
+            parse_mode='Markdown'
+        )
+        return
+    
+    patient_identifier = context.args[0]
+    
+    # Look up patient
+    patient = None
+    patient_id = None
+    
+    if patient_identifier in scheduler.patients:
+        patient = scheduler.patients[patient_identifier]
+        patient_id = patient_identifier
+    else:
+        for tid, p in scheduler.patients.items():
+            if patient_identifier.lower() in p.name.lower() or patient_identifier.lower() in p.preferred_name.lower():
+                patient_id = tid
+                patient = p
+                break
+    
+    if not patient:
+        await update.message.reply_text(f"⚠️ Patient \"{patient_identifier}\" not found.")
+        return
+    
+    # Generate report
+    await update.message.reply_text(f"⏳ Generating weekly report for {patient.name}...")
+    
+    report = await scheduler._generate_patient_report(patient)
+    
+    # Send to case worker (you)
+    await update.message.reply_text(report, parse_mode='Markdown')
+
+
 async def delmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /delmed command to delete a medication.
     
@@ -1251,6 +1302,7 @@ def setup_bot():
     application.add_handler(CommandHandler("delmed", delmed_command))
     application.add_handler(CommandHandler("listmed", listmed_command))
     application.add_handler(CommandHandler("adherence", adherence_command))
+    application.add_handler(CommandHandler("weeklyreport", weeklyreport_command))
     
     # Medication callback handler (for confirmation buttons)
     from telegram.ext import CallbackQueryHandler
@@ -1323,6 +1375,7 @@ def main():
     application.add_handler(CommandHandler("delmed", delmed_command))
     application.add_handler(CommandHandler("listmed", listmed_command))
     application.add_handler(CommandHandler("adherence", adherence_command))
+    application.add_handler(CommandHandler("weeklyreport", weeklyreport_command))
     
     # Medication callback handler (for confirmation buttons)
     from telegram.ext import CallbackQueryHandler
