@@ -484,6 +484,8 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "created_by": telegram_id
     }
     
+    logger.info(f"[addmed_command] Stored pending medication: {med_name}, instructions='{instructions}'")
+    
     # Show confirmation message with inline buttons
     confirmation_msg = f"""💊 *Confirm Add Medication?*
 
@@ -619,11 +621,15 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             instructions = pending_data.get("instructions", "")
             created_by = pending_data.get("created_by", telegram_id)
             
+            logger.info(f"[addmed_confirm] Retrieved pending data: med_name={med_name}, instructions='{instructions}'")
+            
             # Add medication (to Supabase if available)
             if scheduler.medication_manager:
+                logger.info(f"[addmed_confirm] Calling add_medication_async with instructions='{instructions}'")
                 medication = await scheduler.medication_manager.add_medication_async(
                     patient_id, med_name, dosage, instructions, times, created_by=created_by
                 )
+                logger.info(f"[addmed_confirm] Medication saved, id={medication.id if medication else 'None'}")
                 
                 # Clean up pending data
                 if pending_key in pending_medications:
