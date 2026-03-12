@@ -597,8 +597,8 @@ Please follow up with the patient.
                     "alert_needed": False
                 }
             
-            elif action == "med_reason" and len(parts) >= 6:
-                # med_reason:reason:patient_id:med_id:date:time
+            elif action == "med_reason" and len(parts) >= 4:
+                # med_reason:reason:patient_id:med_id (date/time optional)
                 reason = parts[1]
                 patient_id = parts[2]
                 med_id = parts[3]
