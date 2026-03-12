@@ -372,8 +372,8 @@ pending_medications: Dict[str, Dict] = {}
 async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /addmed command to add medication for a patient.
     
-    Usage: /addmed <patient_name> <name> <dosage> <times>
-    Example: /addmed Eric Metformin 500mg 08:00,20:00
+    Usage: /addmed <patient_name> <name> <dosage> <times> [instructions]
+    Example: /addmed Eric Metformin 500mg 08:00,20:00 Take with meals
     """
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     
@@ -388,8 +388,8 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args or len(context.args) < 4:
         await update.message.reply_text(
             "💊 *Add Medication*\n\n"
-            "Usage: `/addmed <patient_name> <med_name> <dosage> <times>`\n\n"
-            "Example: `/addmed Eric Metformin 500mg 08:00,20:00`\n\n"
+            "Usage: `/addmed <patient_name> <med_name> <dosage> <times> [instructions]`\n\n"
+            "Example: `/addmed Eric Metformin 500mg 08:00,20:00 Take with meals`\n\n"
             "Times should be comma-separated (24-hour format).",
             parse_mode='Markdown'
         )
@@ -419,13 +419,24 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(matches) == 1:
             patient_id, patient = matches[0]
         elif len(matches) > 1:
-            # Multiple matches - show selection
+            # Multiple matches - store pending data first
+            import time as time_module
+            select_key = f"select_{int(time_module.time() * 1000)}"
+            pending_medications[select_key] = {
+                "med_name": med_name,
+                "dosage": dosage,
+                "times": [t.strip() for t in times_str.split(',')],
+                "instructions": instructions,
+                "created_by": telegram_id
+            }
+            
+            # Show selection - pass select_key in callback
             keyboard = []
             for tid, p in matches:
                 keyboard.append([
                     InlineKeyboardButton(
                         f"{p.name} ({p.preferred_name})",
-                        callback_data=f"addmed_select|{tid}|{med_name}|{dosage}|{times_str}"
+                        callback_data=f"addmed_select|{tid}|{select_key}"
                     )
                 ])
             keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")])
@@ -459,6 +470,20 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"⚠️ Invalid time format: {t}. Use HH:MM format.")
             return
     
+    # Generate a unique key for this pending medication
+    import time as time_module
+    pending_key = f"{patient_id}_{med_name}_{int(time_module.time() * 1000)}"
+    
+    # Store pending medication data (including instructions)
+    pending_medications[pending_key] = {
+        "patient_id": patient_id,
+        "med_name": med_name,
+        "dosage": dosage,
+        "times": times,
+        "instructions": instructions,
+        "created_by": telegram_id
+    }
+    
     # Show confirmation message with inline buttons
     confirmation_msg = f"""💊 *Confirm Add Medication?*
 
@@ -470,10 +495,10 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if instructions:
         confirmation_msg += f"\n*Instructions:* {instructions}"
     
-    # Create inline keyboard
+    # Create inline keyboard - pass pending_key instead of all data
     keyboard = [
         [
-            InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm|{patient_id}|{med_name}|{dosage}|{times_str}"),
+            InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm|{pending_key}"),
             InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")
         ]
     ]
@@ -489,6 +514,7 @@ async def addmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle medication confirmation callback."""
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    import time as time_module
     
     query = update.callback_query
     await query.answer()
@@ -503,25 +529,51 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     if data == "addmed_cancel":
+        # Clean up any pending medications
+        keys_to_remove = [k for k in pending_medications.keys() if k.startswith(telegram_id)]
+        for k in keys_to_remove:
+            del pending_medications[k]
         await query.edit_message_text("❌ *Cancelled*\n\nMedication was not added.", parse_mode='Markdown')
         return
     
     # Handle patient selection from multiple matches
     if data.startswith("addmed_select|"):
-        # Parse: addmed_select|patient_id|med_name|dosage|times
+        # Parse: addmed_select|patient_id|select_key
         parts = data.split("|")
-        if len(parts) >= 5:
+        if len(parts) >= 3:
             patient_id = parts[1]
-            med_name = parts[2]
-            dosage = parts[3]
-            times_str = parts[4]
-            times = [t.strip() for t in times_str.split(',')]
+            select_key = parts[2]
             
             # Get patient info
             patient = scheduler.patients.get(patient_id)
             if not patient:
                 await query.edit_message_text("⚠️ Patient not found.", parse_mode='Markdown')
                 return
+            
+            # Retrieve pending medication data
+            pending_data = pending_medications.get(select_key)
+            if not pending_data:
+                await query.edit_message_text("⚠️ Medication data expired. Please try again.", parse_mode='Markdown')
+                return
+            
+            med_name = pending_data["med_name"]
+            dosage = pending_data["dosage"]
+            times = pending_data["times"]
+            instructions = pending_data.get("instructions", "")
+            
+            # Generate new pending key for final confirmation
+            import time as time_module
+            pending_key = f"{patient_id}_{med_name}_{int(time_module.time() * 1000)}"
+            
+            # Store with patient_id for final confirmation
+            pending_medications[pending_key] = {
+                "patient_id": patient_id,
+                "med_name": med_name,
+                "dosage": dosage,
+                "times": times,
+                "instructions": instructions,
+                "created_by": pending_data.get("created_by", telegram_id)
+            }
             
             # Show confirmation
             confirmation_msg = f"""💊 *Confirm Add Medication?*
@@ -531,9 +583,12 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 *Dosage:* {dosage}
 *Reminder times:* {', '.join(times)}"""
             
+            if instructions:
+                confirmation_msg += f"\n*Instructions:* {instructions}"
+            
             keyboard = [
                 [
-                    InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm|{patient_id}|{med_name}|{dosage}|{times_str}"),
+                    InlineKeyboardButton("✅ Confirm", callback_data=f"addmed_confirm|{pending_key}"),
                     InlineKeyboardButton("❌ Cancel", callback_data="addmed_cancel")
                 ]
             ]
@@ -546,34 +601,50 @@ async def addmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if data.startswith("addmed_confirm|"):
-        # Parse callback data (using | as separator to handle colons in times)
+        # Parse callback data to get pending key
         parts = data.split("|")
-        if len(parts) >= 5:
-            patient_id = parts[1]
-            med_name = parts[2]
-            dosage = parts[3]
-            times_str = parts[4]
-            times = [t.strip() for t in times_str.split(',')]
+        if len(parts) >= 2:
+            pending_key = parts[1]
+            
+            # Retrieve pending medication data
+            pending_data = pending_medications.get(pending_key)
+            if not pending_data:
+                await query.edit_message_text("⚠️ Medication data expired. Please try again.", parse_mode='Markdown')
+                return
+            
+            patient_id = pending_data["patient_id"]
+            med_name = pending_data["med_name"]
+            dosage = pending_data["dosage"]
+            times = pending_data["times"]
+            instructions = pending_data.get("instructions", "")
+            created_by = pending_data.get("created_by", telegram_id)
             
             # Add medication (to Supabase if available)
             if scheduler.medication_manager:
                 medication = await scheduler.medication_manager.add_medication_async(
-                    patient_id, med_name, dosage, "", times, created_by=telegram_id
+                    patient_id, med_name, dosage, instructions, times, created_by=created_by
                 )
+                
+                # Clean up pending data
+                if pending_key in pending_medications:
+                    del pending_medications[pending_key]
                 
                 # Get patient name
                 patient_name = patient_id
                 if patient_id in scheduler.patients:
                     patient_name = scheduler.patients[patient_id].name
                 
-                await query.edit_message_text(
-                    f"✅ *Medication Added Successfully!*\n\n"
-                    f"• Patient: {patient_name}\n"
-                    f"• Medication: {med_name} ({dosage})\n"
-                    f"• Reminder times: {', '.join(times)}\n\n"
-                    f"The patient will receive reminders at the scheduled times.",
-                    parse_mode='Markdown'
-                )
+                success_msg = f"✅ *Medication Added Successfully!*\n\n" \
+                    f"• Patient: {patient_name}\n" \
+                    f"• Medication: {med_name} ({dosage})\n" \
+                    f"• Reminder times: {', '.join(times)}"
+                
+                if instructions:
+                    success_msg += f"\n• Instructions: {instructions}"
+                
+                success_msg += "\n\nThe patient will receive reminders at the scheduled times."
+                
+                await query.edit_message_text(success_msg, parse_mode='Markdown')
             else:
                 await query.edit_message_text(
                     "⚠️ Medication system not available.",
