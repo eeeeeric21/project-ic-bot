@@ -199,6 +199,8 @@ class MedicationManager:
                         "active": True
                     }
                     
+                    logger.info(f"Saving medication to Supabase: {name}, dosage={dosage}, instructions={instructions}, times={reminder_times}")
+                    
                     async with session.post(url, headers=headers, json=payload) as resp:
                         if resp.status == 201:
                             data = await resp.json()
