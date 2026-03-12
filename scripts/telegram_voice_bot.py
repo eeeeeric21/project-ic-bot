@@ -1273,6 +1273,10 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
             session["risk_score"],
             list(set(session["signals"]))
         )
+        # Reset risk score after alert to prevent spam
+        session["risk_score"] = 0
+        session["signals"] = []
+        logger.info(f"Alert sent, risk score reset for {patient.preferred_name}")
 
 
 def setup_bot():
