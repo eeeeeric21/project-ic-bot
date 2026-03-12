@@ -76,6 +76,7 @@ class MedicationManager:
     def __init__(self):
         self.medications: Dict[str, List[Medication]] = {}  # patient_id -> medications
         self.pending_reminders: Dict[str, MedicationReminder] = {}  # reminder_id -> reminder
+        self._callback_mapping: Dict[str, Dict] = {}  # short_key -> callback data
         self.bot_token = BOT_TOKEN
         self.supabase_url = SUPABASE_URL
         self.supabase_key = SUPABASE_KEY
@@ -311,8 +312,27 @@ class MedicationManager:
         time_str_safe = time_str.replace(':', '')
         
         for med in medications:
-            callback_taken = f"med_taken:{patient_id}:{med.id}:{date_str}:{time_str_safe}"
-            callback_skip = f"med_skip:{patient_id}:{med.id}:{date_str}:{time_str_safe}"
+            # Create a short key (med_id is UUID, too long for callback)
+            # Use last 8 chars of med.id + time for uniqueness
+            short_med_id = med.id.split('-')[0] if '-' in med.id else med.id[:8]
+            
+            callback_taken = f"mt:{short_med_id}:{time_str_safe}"
+            callback_skip = f"ms:{short_med_id}:{time_str_safe}"
+            
+            # Store mapping for later lookup
+            reminder_key = f"{patient_id}-{med.id}-{date_str}-{time_str_safe}"
+            self._callback_mapping[callback_taken] = {
+                "type": "taken",
+                "patient_id": patient_id,
+                "med_id": med.id,
+                "reminder_key": reminder_key
+            }
+            self._callback_mapping[callback_skip] = {
+                "type": "skip",
+                "patient_id": patient_id,
+                "med_id": med.id,
+                "reminder_key": reminder_key
+            }
             
             inline_keyboard.append([
                 {"text": f"✓ Taken {med.name}", "callback_data": callback_taken},
@@ -321,7 +341,12 @@ class MedicationManager:
         
         # Add "Taken All" button if multiple medications
         if len(medications) > 1:
-            callback_all = f"med_taken_all:{patient_id}:{date_str}:{time_str_safe}"
+            callback_all = f"ma:{patient_id[-6:]}:{time_str_safe}"
+            self._callback_mapping[callback_all] = {
+                "type": "taken_all",
+                "patient_id": patient_id,
+                "time": time_str
+            }
             inline_keyboard.append([
                 {"text": f"✅ Taken All ({len(medications)} meds)", "callback_data": callback_all}
             ])
@@ -566,7 +591,133 @@ Please follow up with the patient.
             parts = callback_data.split(":")
             action = parts[0]
             
-            if action == "med_taken" and len(parts) >= 5:
+            # Skip reason callbacks
+            if action == "med_reason" and len(parts) >= 4:
+                # med_reason:reason:patient_id:med_id
+                reason = parts[1]
+                patient_id = parts[2]
+                med_id = parts[3]
+                
+                # Mark as taken or skipped based on reason
+                if reason in self.TAKEN_REASONS:
+                    self.mark_taken_by_id(patient_id, med_id, reason=reason)
+                else:
+                    self.mark_skipped_by_id(patient_id, med_id, reason=reason)
+                
+                med_name = self._get_med_name(med_id)
+                
+                # Build response message
+                if reason in self.TAKEN_REASONS:
+                    response_msg = f"✅ Got it, marked {med_name} as taken."
+                elif reason in self.ALERT_REASONS:
+                    reason_text = "side effects" if reason == "side_effects" else "refill needed"
+                    response_msg = f"📝 Noted. I'll let your caregiver know about the {reason_text}."
+                elif reason == "doctor_paused":
+                    response_msg = f"✅ Understood. We'll note that the doctor paused {med_name}."
+                else:
+                    response_msg = "✅ Okay, logged as skipped."
+                
+                return {
+                    "success": True,
+                    "message": response_msg,
+                    "alert_needed": reason in self.ALERT_REASONS,
+                    "alert_reason": reason,
+                    "patient_id": patient_id,
+                    "medication_name": med_name
+                }
+            
+            # Short skip reason callbacks (mr:xxx:ppppp:mmmm)
+            if action == "mr" and len(parts) >= 4:
+                # mr:reason_short:patient_short:med_short
+                reason_short = parts[1]
+                # Map short reason codes back to full names
+                reason_map = {
+                    "alr": "already_took",
+                    "sid": "side_effects",
+                    "doc": "doctor_paused",
+                    "ran": "ran_out",
+                    "don": "dont_need",
+                    "no_": "no_reason",
+                    "dis": "dismissed"
+                }
+                reason = reason_map.get(reason_short, reason_short)
+                
+                # Look up full data from mapping
+                mapping = self._callback_mapping.get(callback_data)
+                if mapping:
+                    patient_id = mapping.get("patient_id")
+                    med_id = mapping.get("med_id")
+                else:
+                    return {"success": False, "message": "⚠️ Data expired. Please try again."}
+                
+                # Mark as taken or skipped based on reason
+                if reason in self.TAKEN_REASONS:
+                    self.mark_taken_by_id(patient_id, med_id, reason=reason)
+                else:
+                    self.mark_skipped_by_id(patient_id, med_id, reason=reason)
+                
+                med_name = self._get_med_name(med_id)
+                
+                # Build response message
+                if reason in self.TAKEN_REASONS:
+                    response_msg = f"✅ Got it, marked {med_name} as taken."
+                elif reason in self.ALERT_REASONS:
+                    reason_text = "side effects" if reason == "side_effects" else "refill needed"
+                    response_msg = f"📝 Noted. I'll let your caregiver know about the {reason_text}."
+                elif reason == "doctor_paused":
+                    response_msg = f"✅ Understood. We'll note that the doctor paused {med_name}."
+                else:
+                    response_msg = "✅ Okay, logged as skipped."
+                
+                return {
+                    "success": True,
+                    "message": response_msg,
+                    "alert_needed": reason in self.ALERT_REASONS,
+                    "alert_reason": reason,
+                    "patient_id": patient_id,
+                    "medication_name": med_name
+                }
+            
+            # Use mapping for short callbacks (mt, ms, ma)
+            mapping = self._callback_mapping.get(callback_data)
+            
+            if mapping:
+                action_type = mapping.get("type")
+                patient_id = mapping.get("patient_id")
+                med_id = mapping.get("med_id")
+                med_name = mapping.get("med_name", self._get_med_name(med_id) if med_id else "Medication")
+                
+                if action_type == "taken":
+                    result = self.mark_taken_by_id(patient_id, med_id)
+                    if result:
+                        return {
+                            "success": True,
+                            "message": f"✅ *Logged:* {med_name} taken at {self._current_time()}",
+                            "alert_needed": False
+                        }
+                    else:
+                        return {"success": False, "message": "⚠️ Could not log medication."}
+                
+                elif action_type == "skip":
+                    # Send skip reason buttons
+                    keyboard = self._build_skip_reason_keyboard_short(patient_id, med_id)
+                    return {
+                        "success": True,
+                        "message": f"⏭ *Skipped:* {med_name}\n\nMay I ask why? (This helps your care team)",
+                        "keyboard": keyboard,
+                        "alert_needed": False
+                    }
+                
+                elif action_type == "taken_all":
+                    count = self.mark_all_taken(patient_id)
+                    return {
+                        "success": True,
+                        "message": f"✅ All medications logged as taken at {self._current_time()}",
+                        "alert_needed": False
+                    }
+            
+            # Legacy support for old format (fallback)
+            elif action == "med_taken" and len(parts) >= 5:
                 # med_taken:patient_id:med_id:date:time
                 patient_id = parts[1]
                 med_id = parts[2]
@@ -599,42 +750,6 @@ Please follow up with the patient.
                     "alert_needed": False
                 }
             
-            elif action == "med_reason" and len(parts) >= 4:
-                # med_reason:reason:patient_id:med_id (date/time optional)
-                reason = parts[1]
-                patient_id = parts[2]
-                med_id = parts[3]
-                
-                # Mark as taken or skipped based on reason
-                if reason in self.TAKEN_REASONS:
-                    self.mark_taken_by_id(patient_id, med_id, reason=reason)
-                    final_action = "taken"
-                else:
-                    self.mark_skipped_by_id(patient_id, med_id, reason=reason)
-                    final_action = "skipped"
-                
-                med_name = self._get_med_name(med_id)
-                
-                # Build response message
-                if reason in self.TAKEN_REASONS:
-                    response_msg = f"✅ Got it, marked {med_name} as taken."
-                elif reason in self.ALERT_REASONS:
-                    reason_text = "side effects" if reason == "side_effects" else "refill needed"
-                    response_msg = f"📝 Noted. I'll let your caregiver know about the {reason_text}."
-                elif reason == "doctor_paused":
-                    response_msg = f"✅ Understood. We'll note that the doctor paused {med_name}."
-                else:
-                    response_msg = "✅ Okay, logged as skipped."
-                
-                return {
-                    "success": True,
-                    "message": response_msg,
-                    "alert_needed": reason in self.ALERT_REASONS,
-                    "alert_reason": reason,
-                    "patient_id": patient_id,
-                    "medication_name": med_name
-                }
-            
             elif action == "med_taken_all" and len(parts) >= 4:
                 # med_taken_all:patient_id:date:time
                 patient_id = parts[1]
@@ -655,12 +770,32 @@ Please follow up with the patient.
             return {"success": False, "message": "⚠️ An error occurred."}
     
     def _build_skip_reason_keyboard(self, patient_id: str, med_id: str) -> List[List[Dict]]:
-        """Build inline keyboard with skip reason buttons."""
+        """Build inline keyboard with skip reason buttons (legacy - may exceed 64 bytes)."""
         keyboard = []
         for code, label in self.SKIP_REASONS.items():
             keyboard.append([{
                 "text": label,
                 "callback_data": f"med_reason:{code}:{patient_id}:{med_id}"
+            }])
+        return keyboard
+    
+    def _build_skip_reason_keyboard_short(self, patient_id: str, med_id: str) -> List[List[Dict]]:
+        """Build inline keyboard with skip reason buttons (short format)."""
+        keyboard = []
+        # Use short med_id to stay within 64 bytes
+        short_med_id = med_id.replace('-', '')[:8]
+        for code, label in self.SKIP_REASONS.items():
+            callback_data = f"mr:{code[:3]}:{patient_id[-6:]}:{short_med_id}"
+            # Store mapping
+            self._callback_mapping[callback_data] = {
+                "type": "reason",
+                "reason": code,
+                "patient_id": patient_id,
+                "med_id": med_id
+            }
+            keyboard.append([{
+                "text": label,
+                "callback_data": callback_data
             }])
         return keyboard
     
