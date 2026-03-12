@@ -443,9 +443,14 @@ _Generated automatically by Project IC_
     async def _process_medication_reminders(self):
         """Process medication reminders, follow-ups, and missed alerts."""
         if not self.medication_manager:
+            logger.warning("Medication manager not available")
             return
         
         now = datetime.now(SG_TIMEZONE)
+        
+        # Log current state
+        logger.info(f"🔄 Checking medication reminders at {now.strftime('%H:%M')}")
+        logger.info(f"📋 Total patients with medications: {len(self.medication_manager.medications)}")
         
         # Group medications by patient and time
         reminders_to_send: Dict[str, Dict[str, List]] = {}  # patient_id -> {time_str -> [medications]}
@@ -453,7 +458,10 @@ _Generated automatically by Project IC_
         for patient_id, medications in self.medication_manager.medications.items():
             for medication in medications:
                 for time_str in medication.reminder_times:
-                    if self.medication_manager.should_send_reminder(time_str):
+                    should_send = self.medication_manager.should_send_reminder(time_str)
+                    logger.info(f"  Checking {medication.name} at {time_str} for {patient_id}: should_send={should_send}")
+                    
+                    if should_send:
                         # Check if already sent today
                         reminder_key = f"{patient_id}-{medication.id}-{now.strftime('%Y%m%d')}-{time_str.replace(':', '')}"
                         
