@@ -825,27 +825,40 @@ async def weeklyreport_command(update: Update, context: ContextTypes.DEFAULT_TYP
     patient = None
     patient_id = None
     
+    # Try direct lookup first
     if patient_identifier in scheduler.patients:
         patient = scheduler.patients[patient_identifier]
         patient_id = patient_identifier
     else:
+        # Search by name
         for tid, p in scheduler.patients.items():
-            if patient_identifier.lower() in p.name.lower() or patient_identifier.lower() in p.preferred_name.lower():
+            if (patient_identifier.lower() in p.name.lower() or 
+                patient_identifier.lower() in (p.preferred_name or "").lower() or
+                tid == patient_identifier):  # Also allow lookup by telegram ID
                 patient_id = tid
                 patient = p
                 break
     
     if not patient:
-        await update.message.reply_text(f"⚠️ Patient \"{patient_identifier}\" not found.")
+        # List available patients
+        patient_list = ", ".join([p.name for p in scheduler.patients.values()]) if scheduler.patients else "None"
+        await update.message.reply_text(
+            f"⚠️ Patient \"{patient_identifier}\" not found.\n\n"
+            f"Available patients: {patient_list}",
+            parse_mode='Markdown'
+        )
         return
     
     # Generate report
     await update.message.reply_text(f"⏳ Generating weekly report for {patient.name}...")
     
-    report = await scheduler._generate_patient_report(patient)
-    
-    # Send to case worker (you)
-    await update.message.reply_text(report, parse_mode='Markdown')
+    try:
+        report = await scheduler._generate_patient_report(patient)
+        await update.message.reply_text(report, parse_mode='Markdown')
+    except Exception as e:
+        import traceback
+        logger.error(f"Error generating weekly report: {e}\n{traceback.format_exc()}")
+        await update.message.reply_text(f"⚠️ Error generating report: {str(e)}")
 
 
 async def delmed_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
