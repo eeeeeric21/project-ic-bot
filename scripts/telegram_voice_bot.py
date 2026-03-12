@@ -1257,8 +1257,8 @@ def setup_bot():
     application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
     application.add_handler(CallbackQueryHandler(delmed_callback, pattern="^delmed_"))
     
-    # Medication reminder button callbacks (taken/skip/skip reason)
-    application.add_handler(CallbackQueryHandler(med_reminder_callback, pattern="^med_"))
+    # Medication reminder button callbacks (taken/skip/skip reason) - both old and new format
+    application.add_handler(CallbackQueryHandler(med_reminder_callback, pattern="^(med_|mt:|ms:|mr:|ma:)"))
     
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
@@ -1329,8 +1329,8 @@ def main():
     application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
     application.add_handler(CallbackQueryHandler(delmed_callback, pattern="^delmed_"))
     
-    # Medication reminder button callbacks (taken/skip/skip reason)
-    application.add_handler(CallbackQueryHandler(med_reminder_callback, pattern="^med_"))
+    # Medication reminder button callbacks (taken/skip/skip reason) - both old and new format
+    application.add_handler(CallbackQueryHandler(med_reminder_callback, pattern="^(med_|mt:|ms:|mr:|ma:)"))
     
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
