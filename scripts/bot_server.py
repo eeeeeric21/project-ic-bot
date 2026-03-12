@@ -147,9 +147,27 @@ async def main():
     asyncio.create_task(scheduler.run_scheduler())
     logger.info("Check-in scheduler started (8 AM, 2 PM, 8 PM, weekly reports)")
     
-    # Keep running
-    while True:
-        await asyncio.sleep(1)
+    # Graceful shutdown handler
+    import signal
+    shutdown_event = asyncio.Event()
+    
+    def signal_handler():
+        logger.info("Shutdown signal received, stopping...")
+        shutdown_event.set()
+    
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, signal_handler)
+    
+    # Keep running until shutdown
+    await shutdown_event.wait()
+    
+    # Cleanup
+    logger.info("Stopping updater...")
+    await application.updater.stop()
+    await application.stop()
+    await application.shutdown()
+    logger.info("Bot stopped cleanly")
 
 if __name__ == "__main__":
     asyncio.run(main())
