@@ -870,6 +870,81 @@ async def delmed_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⚠️ Invalid medication data.", parse_mode='Markdown')
 
 
+async def med_reminder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle medication reminder button callbacks (taken/skip/reason)."""
+    from telegram import InlineKeyboardMarkup
+    
+    query = update.callback_query
+    await query.answer()
+    
+    telegram_id = str(query.from_user.id)
+    callback_data = query.data
+    message_id = query.message.message_id
+    
+    if not scheduler or not scheduler.medication_manager:
+        await query.edit_message_text("⚠️ Medication system not available.")
+        return
+    
+    # Handle the callback
+    result = await scheduler.medication_manager.handle_callback(
+        callback_data, 
+        telegram_id, 
+        message_id
+    )
+    
+    if result["success"]:
+        if result.get("keyboard"):
+            # Show skip reason buttons
+            await query.edit_message_text(
+                result["message"],
+                parse_mode='Markdown',
+                reply_markup=InlineKeyboardMarkup(result["keyboard"])
+            )
+        else:
+            # Just update the message
+            await query.edit_message_text(result["message"], parse_mode='Markdown')
+        
+        # Send caregiver alert if needed
+        if result.get("alert_needed"):
+            await send_medication_alert_to_caregiver(
+                result.get("patient_id", telegram_id),
+                result.get("medication_name", "Medication"),
+                result.get("alert_reason", "unknown")
+            )
+    else:
+        await query.answer(result.get("message", "Error"), show_alert=True)
+
+
+async def send_medication_alert_to_caregiver(patient_id: str, medication_name: str, reason: str):
+    """Send alert to case worker about medication issue."""
+    if not BOT_TOKEN or not CASE_WORKER_CHAT_ID:
+        return
+    
+    # Get patient name
+    patient_name = patient_id
+    if patient_id in scheduler.patients:
+        patient_name = scheduler.patients[patient_id].name
+    
+    reason_text = "Side effects reported" if reason == "side_effects" else "Medication ran out"
+    now = datetime.now().strftime('%H:%M on %d %b %Y')
+    
+    message = f"""⚠️ *Medication Alert — {patient_name}*
+
+📅 {now}
+💊 {medication_name} — SKIPPED
+📝 Reason: "{reason_text}"
+
+Please follow up with {patient_name}."""
+    
+    async with aiohttp.ClientSession() as session:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        await session.post(url, json={
+            "chat_id": CASE_WORKER_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        })
+
+
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle voice messages."""
     user = update.effective_user
@@ -1102,6 +1177,9 @@ def setup_bot():
     application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
     application.add_handler(CallbackQueryHandler(delmed_callback, pattern="^delmed_"))
     
+    # Medication reminder button callbacks (taken/skip/skip reason)
+    application.add_handler(CallbackQueryHandler(med_reminder_callback, pattern="^med_"))
+    
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
@@ -1170,6 +1248,9 @@ def main():
     from telegram.ext import CallbackQueryHandler
     application.add_handler(CallbackQueryHandler(addmed_callback, pattern="^addmed_"))
     application.add_handler(CallbackQueryHandler(delmed_callback, pattern="^delmed_"))
+    
+    # Medication reminder button callbacks (taken/skip/skip reason)
+    application.add_handler(CallbackQueryHandler(med_reminder_callback, pattern="^med_"))
     
     application.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))

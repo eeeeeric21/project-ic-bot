@@ -447,7 +447,9 @@ _Generated automatically by Project IC_
         
         now = datetime.now(SG_TIMEZONE)
         
-        # Check for scheduled medication reminders
+        # Group medications by patient and time
+        reminders_to_send: Dict[str, Dict[str, List]] = {}  # patient_id -> {time_str -> [medications]}
+        
         for patient_id, medications in self.medication_manager.medications.items():
             for medication in medications:
                 for time_str in medication.reminder_times:
@@ -456,9 +458,25 @@ _Generated automatically by Project IC_
                         reminder_key = f"{patient_id}-{medication.id}-{now.strftime('%Y%m%d')}-{time_str.replace(':', '')}"
                         
                         if reminder_key not in self.medication_manager.pending_reminders:
-                            logger.info(f"💊 Sending medication reminder: {medication.name} to {patient_id} at {time_str}")
-                            await self.medication_manager.send_reminder(patient_id, medication, time_str)
-                            await asyncio.sleep(2)
+                            # Group by patient and time
+                            if patient_id not in reminders_to_send:
+                                reminders_to_send[patient_id] = {}
+                            if time_str not in reminders_to_send[patient_id]:
+                                reminders_to_send[patient_id][time_str] = []
+                            reminders_to_send[patient_id][time_str].append(medication)
+        
+        # Send grouped reminders
+        for patient_id, times in reminders_to_send.items():
+            for time_str, meds in times.items():
+                if len(meds) == 1:
+                    # Single medication - use original method
+                    logger.info(f"💊 Sending medication reminder: {meds[0].name} to {patient_id} at {time_str}")
+                    await self.medication_manager.send_reminder(patient_id, meds, time_str)
+                else:
+                    # Multiple medications - send together with inline buttons
+                    logger.info(f"💊 Sending {len(meds)} medication reminders to {patient_id} at {time_str}")
+                    await self.medication_manager.send_reminder(patient_id, meds, time_str)
+                await asyncio.sleep(2)
         
         # Check for follow-ups and missed medications
         for reminder_id, reminder in list(self.medication_manager.pending_reminders.items()):

@@ -285,51 +285,71 @@ class MedicationManager:
         with open(config_path, 'w') as f:
             json.dump({"medications": all_meds}, f, indent=2)
     
-    async def send_reminder(self, patient_id: str, medication: Medication, time_str: str):
-        """Send a medication reminder to a patient."""
+    async def send_reminder(self, patient_id: str, medications: List[Medication], time_str: str):
+        """Send a medication reminder to a patient with inline buttons."""
         if not self.bot_token:
             logger.error("BOT_TOKEN not set")
             return False
         
-        # Build message
-        med_info = f"{medication.name}"
-        if medication.dosage:
-            med_info += f" ({medication.dosage})"
+        # Build message for multiple medications
+        time_display = self._format_time(time_str)
+        message = f"⏰ *{time_display} — Time for your medicine:*\n\n"
         
-        instructions = f"\n📝 {medication.instructions}" if medication.instructions else ""
+        for med in medications:
+            message += f"💊 *{med.name}*"
+            if med.dosage:
+                message += f" — {med.dosage}"
+            message += "\n"
+            if med.instructions:
+                message += f"   _{med.instructions}_\n"
         
-        message = f"""💊 *Medication Reminder*
-
-Time to take your medicine:
-• {med_info}{instructions}
-
-Reply:
-• "taken" - when you've taken it
-• "skip" - if you need to skip
-
-_Stay healthy! 💙_"""
+        # Build inline keyboard with individual medication buttons
+        inline_keyboard = []
+        date_str = datetime.now(SG_TIMEZONE).strftime('%Y%m%d')
+        time_str_safe = time_str.replace(':', '')
+        
+        for med in medications:
+            callback_taken = f"med_taken:{patient_id}:{med.id}:{date_str}:{time_str_safe}"
+            callback_skip = f"med_skip:{patient_id}:{med.id}:{date_str}:{time_str_safe}"
+            
+            inline_keyboard.append([
+                {"text": f"✓ Taken {med.name}", "callback_data": callback_taken},
+                {"text": f"⏭ Skip {med.name}", "callback_data": callback_skip}
+            ])
+        
+        # Add "Taken All" button if multiple medications
+        if len(medications) > 1:
+            callback_all = f"med_taken_all:{patient_id}:{date_str}:{time_str_safe}"
+            inline_keyboard.append([
+                {"text": f"✅ Taken All ({len(medications)} meds)", "callback_data": callback_all}
+            ])
         
         async with aiohttp.ClientSession() as session:
             url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
             payload = {
                 "chat_id": patient_id,
                 "text": message,
-                "parse_mode": "Markdown"
+                "parse_mode": "Markdown",
+                "reply_markup": {"inline_keyboard": inline_keyboard}
             }
             
             try:
                 async with session.post(url, json=payload) as resp:
                     if resp.status == 200:
-                        # Track this reminder
-                        reminder_id = f"{patient_id}-{medication.id}-{datetime.now(SG_TIMEZONE).strftime('%Y%m%d')}-{time_str.replace(':', '')}"
-                        self.pending_reminders[reminder_id] = MedicationReminder(
-                            id=reminder_id,
-                            medication_id=medication.id,
-                            patient_id=patient_id,
-                            scheduled_time=datetime.now(SG_TIMEZONE)
-                        )
+                        data = await resp.json()
+                        message_id = data.get("result", {}).get("message_id")
                         
-                        logger.info(f"✅ Sent medication reminder to {patient_id}: {medication.name}")
+                        # Track reminders for each medication
+                        for med in medications:
+                            reminder_id = f"{patient_id}-{med.id}-{date_str}-{time_str_safe}"
+                            self.pending_reminders[reminder_id] = MedicationReminder(
+                                id=reminder_id,
+                                medication_id=med.id,
+                                patient_id=patient_id,
+                                scheduled_time=datetime.now(SG_TIMEZONE)
+                            )
+                        
+                        logger.info(f"✅ Sent medication reminder to {patient_id}: {len(medications)} medications")
                         return True
                     else:
                         error = await resp.text()
@@ -338,6 +358,16 @@ _Stay healthy! 💙_"""
             except Exception as e:
                 logger.error(f"Error sending reminder: {e}")
                 return False
+    
+    def _format_time(self, time_str: str) -> str:
+        """Format time for display (08:00 → 8:00 AM)."""
+        try:
+            hour, minute = map(int, time_str.split(':'))
+            period = "PM" if hour >= 12 else "AM"
+            display_hour = hour % 12 or 12
+            return f"{display_hour}:{minute:02d} {period}"
+        except:
+            return time_str
     
     async def send_followup(self, reminder: MedicationReminder, medication: Medication):
         """Send a follow-up reminder if no response."""
@@ -496,6 +526,189 @@ Please follow up with the patient.
             "adherence_rate": round(adherence_rate, 1),
             "by_medication": med_stats
         }
+
+    # ============================================
+    # INLINE BUTTON CALLBACK HANDLERS
+    # ============================================
+    
+    # Skip reason labels
+    SKIP_REASONS = {
+        "already_took": "✅ Already took it",
+        "side_effects": "⚠️ Side effects",
+        "doctor_paused": "👨‍⚕️ Doctor said pause",
+        "ran_out": "💊 Ran out",
+        "dont_need": "❌ Don't need it",
+        "no_reason": "🤷 No reason",
+        "dismissed": "Dismiss",
+    }
+    
+    # Reasons that trigger caregiver alerts
+    ALERT_REASONS = ["side_effects", "ran_out"]
+    
+    # Reasons that should mark as taken instead
+    TAKEN_REASONS = ["already_took"]
+    
+    async def handle_callback(self, callback_data: str, chat_id: int, message_id: int = None) -> Dict:
+        """
+        Handle inline button callbacks for medication reminders.
+        
+        Args:
+            callback_data: The callback data from the button
+            chat_id: Telegram chat ID
+            message_id: Optional message ID for editing
+        
+        Returns:
+            Dict with 'success', 'message', and 'alert_needed' keys
+        """
+        try:
+            parts = callback_data.split(":")
+            action = parts[0]
+            
+            if action == "med_taken" and len(parts) >= 5:
+                # med_taken:patient_id:med_id:date:time
+                patient_id = parts[1]
+                med_id = parts[2]
+                
+                result = self.mark_taken_by_id(patient_id, med_id)
+                
+                if result:
+                    med_name = self._get_med_name(med_id)
+                    return {
+                        "success": True,
+                        "message": f"✅ *Logged:* {med_name} taken at {self._current_time()}",
+                        "alert_needed": False
+                    }
+                else:
+                    return {"success": False, "message": "⚠️ Could not log medication."}
+            
+            elif action == "med_skip" and len(parts) >= 5:
+                # med_skip:patient_id:med_id:date:time
+                patient_id = parts[1]
+                med_id = parts[2]
+                
+                # Send skip reason buttons
+                keyboard = self._build_skip_reason_keyboard(patient_id, med_id)
+                med_name = self._get_med_name(med_id)
+                
+                return {
+                    "success": True,
+                    "message": f"⏭ *Skipped:* {med_name}\n\nMay I ask why? (This helps your care team)",
+                    "keyboard": keyboard,
+                    "alert_needed": False
+                }
+            
+            elif action == "med_reason" and len(parts) >= 6:
+                # med_reason:reason:patient_id:med_id:date:time
+                reason = parts[1]
+                patient_id = parts[2]
+                med_id = parts[3]
+                
+                # Mark as taken or skipped based on reason
+                if reason in self.TAKEN_REASONS:
+                    self.mark_taken_by_id(patient_id, med_id, reason=reason)
+                    final_action = "taken"
+                else:
+                    self.mark_skipped_by_id(patient_id, med_id, reason=reason)
+                    final_action = "skipped"
+                
+                med_name = self._get_med_name(med_id)
+                
+                # Build response message
+                if reason in self.TAKEN_REASONS:
+                    response_msg = f"✅ Got it, marked {med_name} as taken."
+                elif reason in self.ALERT_REASONS:
+                    reason_text = "side effects" if reason == "side_effects" else "refill needed"
+                    response_msg = f"📝 Noted. I'll let your caregiver know about the {reason_text}."
+                elif reason == "doctor_paused":
+                    response_msg = f"✅ Understood. We'll note that the doctor paused {med_name}."
+                else:
+                    response_msg = "✅ Okay, logged as skipped."
+                
+                return {
+                    "success": True,
+                    "message": response_msg,
+                    "alert_needed": reason in self.ALERT_REASONS,
+                    "alert_reason": reason,
+                    "patient_id": patient_id,
+                    "medication_name": med_name
+                }
+            
+            elif action == "med_taken_all" and len(parts) >= 4:
+                # med_taken_all:patient_id:date:time
+                patient_id = parts[1]
+                
+                count = self.mark_all_taken(patient_id)
+                
+                return {
+                    "success": True,
+                    "message": f"✅ All medications logged as taken at {self._current_time()}",
+                    "alert_needed": False
+                }
+            
+            else:
+                return {"success": False, "message": "⚠️ Invalid action."}
+                
+        except Exception as e:
+            logger.error(f"Error handling callback: {e}")
+            return {"success": False, "message": "⚠️ An error occurred."}
+    
+    def _build_skip_reason_keyboard(self, patient_id: str, med_id: str) -> List[List[Dict]]:
+        """Build inline keyboard with skip reason buttons."""
+        keyboard = []
+        for code, label in self.SKIP_REASONS.items():
+            keyboard.append([{
+                "text": label,
+                "callback_data": f"med_reason:{code}:{patient_id}:{med_id}"
+            }])
+        return keyboard
+    
+    def mark_taken_by_id(self, patient_id: str, med_id: str, reason: str = None) -> bool:
+        """Mark a specific medication as taken."""
+        for rid, reminder in self.pending_reminders.items():
+            if (reminder.patient_id == patient_id and 
+                med_id in rid and 
+                reminder.status == "pending"):
+                reminder.status = "taken"
+                logger.info(f"Marked medication as taken: {rid}")
+                return True
+        return False
+    
+    def mark_skipped_by_id(self, patient_id: str, med_id: str, reason: str = None) -> bool:
+        """Mark a specific medication as skipped with reason."""
+        for rid, reminder in self.pending_reminders.items():
+            if (reminder.patient_id == patient_id and 
+                med_id in rid and 
+                reminder.status == "pending"):
+                reminder.status = "skipped"
+                # Store skip reason (you could add a field to MedicationReminder)
+                logger.info(f"Marked medication as skipped: {rid}, reason: {reason}")
+                return True
+        return False
+    
+    def mark_all_taken(self, patient_id: str) -> int:
+        """Mark all pending medications as taken for a patient."""
+        count = 0
+        for rid, reminder in self.pending_reminders.items():
+            if reminder.patient_id == patient_id and reminder.status == "pending":
+                reminder.status = "taken"
+                count += 1
+        logger.info(f"Marked {count} medications as taken for {patient_id}")
+        return count
+    
+    def _get_med_name(self, med_id: str) -> str:
+        """Get medication name by ID."""
+        for meds in self.medications.values():
+            for med in meds:
+                if med.id == med_id:
+                    name = med.name
+                    if med.dosage:
+                        name += f" ({med.dosage})"
+                    return name
+        return "Medication"
+    
+    def _current_time(self) -> str:
+        """Get current time string."""
+        return datetime.now(SG_TIMEZONE).strftime('%-I:%M %p')
 
 
 # CLI Commands
