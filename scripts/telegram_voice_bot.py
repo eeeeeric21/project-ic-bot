@@ -365,6 +365,110 @@ Continue chatting or use /end to finish."""
     await update.message.reply_text(status_msg, parse_mode='Markdown')
 
 
+async def registerpatient_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /registerpatient command for judges to register as patients."""
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Check if already registered
+    if telegram_id in scheduler.patients:
+        patient = scheduler.patients[telegram_id]
+        await update.message.reply_text(
+            f"✅ *Already Registered*\n\n"
+            f"You're registered as a patient: {patient.name}\n\n"
+            f"Use /start to begin a check-in",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Register as patient
+    name = user.first_name or "Judge"
+    scheduler.register_patient(telegram_id, name)
+    
+    await update.message.reply_text(
+        f"✅ *Registered as Patient*\n\n"
+        f"Welcome, {name}! 👋\n\n"
+        f"You'll now receive:\n"
+        f"• Daily check-ins (8 AM & 2 PM)\n"
+        f"• Medication reminders (if set up)\n\n"
+        f"*Next steps:*\n"
+        f"1. Say 'Hello Aescul Helper' to start a check-in\n"
+        f"2. Try typing 'I'm feeling tired today'\n"
+        f"3. Use /end to complete the check-in\n\n"
+        f"Tip: If you're also a case worker, use /registercaseworker to enable both roles!",
+        parse_mode='Markdown'
+    )
+
+
+async def registercaseworker_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /registercaseworker command for judges to register as case workers."""
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Check if already registered
+    if scheduler.is_case_worker(telegram_id):
+        cw = scheduler.case_workers[telegram_id]
+        await update.message.reply_text(
+            f"✅ *Already Registered*\n\n"
+            f"You're registered as a case worker: {cw['name']}\n\n"
+            f"Use /help to see case worker commands",
+            parse_mode='Markdown'
+        )
+        return
+    
+    # Register as case worker
+    name = user.first_name or "Judge"
+    scheduler.register_case_worker(telegram_id, name)
+    
+    await update.message.reply_text(
+        f"✅ *Registered as Case Worker*\n\n"
+        f"Welcome, {name}! 👨‍⚕️\n\n"
+        f"As a case worker, you can:\n"
+        f"• Add medications: /addmed <patient> <med> <dosage> <time>\n"
+        f"• List medications: /listmed <patient>\n"
+        f"• View adherence: /adherence <patient>\n"
+        f"• Generate reports: /weeklyreport <patient>\n"
+        f"• Delete medications: /delmed <patient> <med>\n\n"
+        f"*Alerts you'll receive:*\n"
+        f"• 🟡 YELLOW - Daily digest\n"
+        f"• 🟠 ORANGE - Instant notification\n"
+        f"• 🔴 RED - Emergency alert\n\n"
+        f"Tip: If you're also a patient, you can have both roles!",
+        parse_mode='Markdown'
+    )
+
+
+async def myrole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /myrole command to show current role(s)."""
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    roles = []
+    
+    if telegram_id in scheduler.patients:
+        patient = scheduler.patients[telegram_id]
+        roles.append(f"👤 *Patient*: {patient.name}")
+    
+    if scheduler.is_case_worker(telegram_id):
+        cw = scheduler.case_workers[telegram_id]
+        roles.append(f"👨‍⚕️ *Case Worker*: {cw['name']}")
+    
+    if not roles:
+        await update.message.reply_text(
+            "❌ *Not Registered*\n\n"
+            "Use these commands to register:\n"
+            "• /registerpatient - Register as a patient\n"
+            "• /registercaseworker - Register as a case worker",
+            parse_mode='Markdown'
+        )
+        return
+    
+    await update.message.reply_text(
+        "📋 *Your Roles*\n\n" + "\n".join(roles),
+        parse_mode='Markdown'
+    )
+
+
 # ============================================
 # MEDICATION COMMANDS (for Case Workers)
 # ============================================

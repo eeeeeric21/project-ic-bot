@@ -80,6 +80,7 @@ class CheckinScheduler:
     
     def __init__(self):
         self.patients: Dict[str, Patient] = {}
+        self.case_workers: Dict[str, Dict] = {}  # telegram_id -> {name, telegram_id, patients: []}
         self.completed_today: Dict[str, Dict] = {}
         self.bot_token = BOT_TOKEN
         self.running = False
@@ -108,6 +109,18 @@ class CheckinScheduler:
                         )
         
         logger.info(f"Loaded {len(self.patients)} patients")
+        self.load_case_workers()
+    
+    def load_case_workers(self):
+        """Load registered case workers from config file."""
+        config_path = Path(__file__).parent.parent / "config" / "case_workers.json"
+        if config_path.exists():
+            with open(config_path) as f:
+                data = json.load(f)
+                for cw in data.get("case_workers", []):
+                    if cw.get("telegram_id"):
+                        self.case_workers[cw["telegram_id"]] = cw
+        logger.info(f"Loaded {len(self.case_workers)} case workers")
     
     def register_patient(self, telegram_id: str, name: str, preferred_name: str = None, case_worker_id: str = ""):
         """Register a new patient for check-ins."""
@@ -121,6 +134,20 @@ class CheckinScheduler:
         self.patients[telegram_id] = patient
         self._save_patients()
         logger.info(f"Registered patient: {name} ({telegram_id})")
+    
+    def register_case_worker(self, telegram_id: str, name: str):
+        """Register a new case worker."""
+        self.case_workers[telegram_id] = {
+            "telegram_id": telegram_id,
+            "name": name,
+            "patients": []
+        }
+        self._save_case_workers()
+        logger.info(f"Registered case worker: {name} ({telegram_id})")
+    
+    def is_case_worker(self, telegram_id: str) -> bool:
+        """Check if a telegram ID is a registered case worker."""
+        return str(telegram_id) in self.case_workers
     
     def _save_patients(self):
         """Save patients to config file."""
@@ -139,6 +166,18 @@ class CheckinScheduler:
                 }
                 for p in self.patients.values()
             ]
+        }
+        
+        with open(config_path, 'w') as f:
+            json.dump(data, f, indent=2)
+    
+    def _save_case_workers(self):
+        """Save case workers to config file."""
+        config_path = Path(__file__).parent.parent / "config" / "case_workers.json"
+        config_path.parent.mkdir(exist_ok=True)
+        
+        data = {
+            "case_workers": list(self.case_workers.values())
         }
         
         with open(config_path, 'w') as f:
