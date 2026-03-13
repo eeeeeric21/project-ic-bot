@@ -8,7 +8,37 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Telegram%20%7C%20PWA%20%7C%20Alexa-lightgrey)]()
 
+**Implementation Status:** [Telegram ✅ 100%] [PWA ⚠️ 30%] [Alexa 🚧 40%]
+
 </div>
+
+---
+
+## 🎯 Implementation Status (March 2026)
+
+### ✅ Fully Working (Production Ready)
+- **Telegram Bot** - Primary interface, 100% functional
+  - All 15+ commands working
+  - MERaLiON AI conversations
+  - Medication reminders
+  - Health alerts
+  - **Try it now:** [@AesculAI_helper_bot](https://t.me/AesculAI_helper_bot)
+
+### ⚠️ Partially Implemented
+- **Web PWA** - UI complete, not yet deployed
+  - Landing page, chat interface, dashboard designed
+  - Currently uses mock data
+  - Not connected to backend yet
+  - **Status:** Planned for Phase 2
+
+### 🚧 Designed but Not Deployed
+- **Alexa Skill** - Code ready, not deployed
+  - Handler code written
+  - Intent model designed
+  - Needs Cloud Functions deployment
+  - **Status:** Planned for Phase 3
+
+**For detailed status, see:** [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)
 
 ---
 
@@ -43,7 +73,7 @@
 
 ## ✨ Features
 
-### For Patients 👴👵
+### For Patients 👴👵 (Telegram Bot - ✅ Fully Working)
 
 - ✅ **Daily Check-ins** - 8 AM morning, 2 PM afternoon
 - ✅ **Voice Conversations** - Speak naturally in Singlish
@@ -51,13 +81,37 @@
 - ✅ **Medication Reminders** - With skip/taken buttons
 - ✅ **Emergency Detection** - Chest pain, falls, breathing issues
 
-### For Caregivers 👨‍⚕️👩‍⚕️
+### For Caregivers 👨‍⚕️👩‍⚕️ (Telegram Bot - ✅ Fully Working)
 
 - ✅ **Health Alerts** - Risk-level based notifications (YELLOW/ORANGE/RED)
 - ✅ **Medication Management** - Add, edit, view medications
 - ✅ **Adherence Reports** - Track medication compliance
 - ✅ **Weekly Summaries** - Comprehensive health reports
-- ✅ **Multi-Patient Dashboard** - Monitor multiple patients
+- ✅ **Multi-Patient Monitoring** - Monitor multiple patients
+
+### Web Dashboard (PWA - ⚠️ UI Only, Not Deployed)
+
+**Currently Built:**
+- Landing page with feature overview
+- Chat interface (demo mode)
+- Dashboard with mock data
+
+**Needs:**
+- Vercel deployment
+- Backend integration
+- Authentication
+
+### Alexa Skill (🚧 Designed, Not Deployed)
+
+**Currently Ready:**
+- Intent model designed
+- Handler code written
+- Conversation flow planned
+
+**Needs:**
+- Alexa Developer Console setup
+- Cloud Functions deployment
+- Account linking configuration
 
 ---
 
@@ -220,56 +274,94 @@ Time: 09:45 on 13 Mar 2026
 
 ## 🌐 Web Dashboard (PWA)
 
+**Status:** ⚠️ Partially Implemented (UI Complete, Not Yet Deployed)
+
+### What's Currently Built
+
+**Landing Page** - Basic homepage with feature overview  
+**Chat Interface** - UI complete with demo AI responses (not connected to MERaLiON yet)  
+**Dashboard** - UI complete with mock data (not connected to Supabase yet)  
+**Patient List** - Basic display with mock patients
+
+### What's Not Yet Implemented
+
+- ❌ Not deployed to Vercel
+- ❌ Using mock data (not connected to real database)
+- ❌ No user authentication
+- ❌ Chat not connected to MERaLiON API
+- ❌ Not a PWA yet (no manifest/service worker)
+
+### Future Plans
+
+**Phase 1 (Planned):**
+- Deploy to Vercel
+- Connect to Supabase database
+- Add Supabase Auth for login
+- Connect chat to MERaLiON
+
+**Phase 2 (Future):**
+- Real-time alert updates
+- Health trend graphs
+- Report generation UI
+- Push notifications
+- PWA installation
+
 ### Access the Dashboard
 
-**URL:** [Your Vercel URL] (Coming soon)
+**Local Development:**
+```bash
+cd ProjectIC/web
+npm run dev
+# Open http://localhost:3000
+```
 
-### Features
-
-#### For Caregivers
-
-- 📊 **Patient Overview** - All patients at a glance
-- 📈 **Risk Levels** - Color-coded health status
-- 💊 **Medication Tracking** - Adherence rates
-- 📋 **Session History** - Past check-ins and transcripts
-- 🔔 **Alert Management** - Resolve/acknowledge alerts
-
-#### For Patients
-
-- 📱 **Mobile-Friendly** - Works on any device
-- 🗣️ **Chat Interface** - Alternative to Telegram
-- 📊 **Health Trends** - Visual health tracking
-- 💊 **Medication Schedule** - View all medications
-
-### Installation (PWA)
-
-1. Open the dashboard in your mobile browser
-2. Tap browser menu (⋮ or Share)
-3. Select "Add to Home Screen"
-4. Now it works like a native app!
+**Production:** Coming soon (will be deployed to Vercel)
 
 ---
 
 ## 🎙️ Alexa Skill
 
-### Setup
+**Status:** 🚧 Designed but Not Yet Deployed (40% Complete)
 
-#### Step 1: Enable the Skill
+### What's Ready
+
+- ✅ Interaction model (intent schema, sample utterances)
+- ✅ Backend handler code written
+- ✅ MERaLiON integration code
+- ✅ Conversation flow designed
+
+### What's Not Yet Done
+
+- ❌ Not uploaded to Alexa Developer Console
+- ❌ Not deployed to Google Cloud Functions
+- ❌ No account linking configured
+- ❌ Not tested on Echo devices
+
+### Future Plans
+
+**Phase 1 (Planned):**
+- Create skill in Alexa Developer Console
+- Upload interaction model
+- Deploy webhook to Cloud Functions
+- Configure account linking with Telegram
+
+**Phase 2 (Future):**
+- Test on Echo devices
+- Submit for certification
+- Add voice-only medication reminders
+- Multi-language support (Malay, Tamil)
+
+### How It Will Work (When Deployed)
+
+#### Setup (Future)
 
 1. Open Alexa app on your phone
 2. Go to "Skills & Games"
 3. Search for "Aescul Helper"
 4. Tap "Enable to Use"
+5. Link your account (matches with Telegram)
 
-#### Step 2: Link Account
-
-1. Alexa will ask to link your account
-2. Enter your phone number (for matching with Telegram)
-3. Confirm the link
-
-### Using Alexa
-
-#### Start a Check-in
+#### Usage (Future)
 
 **Say:**
 > "Alexa, open Aescul Helper"
@@ -277,7 +369,7 @@ Time: 09:45 on 13 Mar 2026
 **Or:**
 > "Alexa, ask Aescul Helper to check in"
 
-#### During Conversation
+#### Example Conversation (Future)
 
 ```
 Alexa: "Hello! I'm Aescul Helper, your health companion. How are you feeling today?"
@@ -291,20 +383,7 @@ You: "Not really, kept waking up"
 Alexa: "Aiyah, sleep problem again. Have you been stressed lately?"
 ```
 
-#### End Conversation
-
-**Say:**
-> "Alexa, goodbye"
-
-**Or:**
-> "That's all"
-
-### Alexa Features
-
-- ✅ **Voice-First** - Hands-free check-ins
-- ✅ **Natural Speech** - Singlish-friendly responses
-- ✅ **Smart Home Integration** - Works with all Alexa devices
-- ✅ **Routines** - Schedule daily check-ins
+**Note:** The Alexa skill is designed and coded, but not yet deployed. It's planned for a future release after the Telegram bot and PWA are fully production-ready.
 
 ---
 
