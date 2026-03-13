@@ -21,6 +21,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from io import BytesIO
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from typing import Dict, Optional
 
@@ -50,6 +51,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Singapore timezone
+SG_TIMEZONE = ZoneInfo("Asia/Singapore")
 
 # Global scheduler instance (set by bot_server.py)
 scheduler: CheckinScheduler = None
@@ -195,7 +199,7 @@ def get_or_create_session(telegram_id: str, user_name: str) -> Dict:
             "messages": [],
             "signals": [],
             "risk_score": 0,
-            "started_at": datetime.now().isoformat()
+            "started_at": datetime.now(SG_TIMEZONE).isoformat()
         }
         active_sessions[telegram_id] = session
     
@@ -219,7 +223,7 @@ async def send_case_worker_alert(patient_name: str, risk_level: str, score: int,
 *Issues Detected:*
 {chr(10).join(f'• {s}' for s in signals)}
 
-_Time: {datetime.now().strftime('%H:%M on %d %b %Y')}_
+_Time: {datetime.now(SG_TIMEZONE).strftime('%H:%M on %d %b %Y')}_
 """
     
     async with aiohttp.ClientSession() as session:
@@ -279,7 +283,7 @@ Let's start! How are you feeling today?"""
     session["messages"].append({
         "role": "assistant",
         "content": welcome_message,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(SG_TIMEZONE).isoformat()
     })
 
 
@@ -1070,7 +1074,7 @@ async def send_medication_alert_to_caregiver(patient_id: str, medication_name: s
         patient_name = scheduler.patients[patient_id].name
     
     reason_text = "Side effects reported" if reason == "side_effects" else "Medication ran out"
-    now = datetime.now().strftime('%H:%M on %d %b %Y')
+    now = datetime.now(SG_TIMEZONE).strftime('%H:%M on %d %b %Y')
     
     message = f"""⚠️ *Medication Alert — {patient_name}*
 
@@ -1176,7 +1180,7 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
         session["messages"].append({
             "role": "assistant",
             "content": greeting,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(SG_TIMEZONE).isoformat()
         })
         
         # Send voice + text response
@@ -1234,12 +1238,12 @@ async def process_text_message(update: Update, context: ContextTypes.DEFAULT_TYP
         "role": "user",
         "content": text,
         "is_voice": is_voice,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(SG_TIMEZONE).isoformat()
     })
     session["messages"].append({
         "role": "assistant",
         "content": ai_response,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now(SG_TIMEZONE).isoformat()
     })
     
     # Send response (text + voice if enabled)

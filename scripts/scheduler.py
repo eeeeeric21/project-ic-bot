@@ -517,7 +517,9 @@ _Generated automatically by Project IC_
                 # Alert case worker
                 patient = self.patients.get(reminder.patient_id)
                 if patient and patient.case_worker_id:
-                    await self.medication_manager.send_missed_alert(reminder, medication, patient.case_worker_id)
+                    await self.medication_manager.send_missed_alert(
+                        reminder, medication, patient.case_worker_id, patient.name
+                    )
     
     def stop(self):
         """Stop the scheduler."""

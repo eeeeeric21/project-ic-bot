@@ -428,16 +428,19 @@ Reply:
                 return False
     
     async def send_missed_alert(self, reminder: MedicationReminder, medication: Medication, 
-                                 case_worker_id: str):
+                                 case_worker_id: str, patient_name: str = None):
         """Alert case worker about missed medication."""
         if not self.bot_token:
             return False
         
         scheduled = reminder.scheduled_time.strftime('%H:%M')
         
+        # Use patient name if provided, otherwise fall back to patient_id
+        display_name = patient_name or reminder.patient_id
+        
         message = f"""⚠️ *Missed Medication Alert*
 
-*Patient:* {reminder.patient_id}
+*Patient:* {display_name}
 *Medication:* {medication.name} ({medication.dosage})
 *Scheduled:* {scheduled}
 *Status:* No response after {MISSED_ALERT_MINUTES} minutes

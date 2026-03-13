@@ -16,6 +16,7 @@ import asyncio
 import argparse
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
@@ -33,6 +34,9 @@ try:
 except ImportError:
     supabase = None
     print("⚠️ Supabase not installed. Database features disabled.")
+
+# Singapore timezone
+SG_TIMEZONE = ZoneInfo("Asia/Singapore")
 
 # Import our modules
 from generate_response import (
@@ -108,7 +112,7 @@ class CheckinBot:
             return {"error": "Patient not found"}
         
         # Determine session type based on time
-        hour = datetime.now().hour
+        hour = datetime.now(SG_TIMEZONE).hour
         if 6 <= hour < 12:
             session_type = "morning"
         elif 17 <= hour < 21:
@@ -123,7 +127,7 @@ class CheckinBot:
             "messages": [],
             "signals": [],
             "risk_score": 0,
-            "started_at": datetime.now().isoformat()
+            "started_at": datetime.now(SG_TIMEZONE).isoformat()
         }
         
         self.active_sessions[patient_id] = session
@@ -227,7 +231,7 @@ class CheckinBot:
             "patient_id": patient_id,
             "session_type": session["session_type"],
             "started_at": session["started_at"],
-            "ended_at": datetime.now().isoformat(),
+            "ended_at": datetime.now(SG_TIMEZONE).isoformat(),
             "detected_categories": list(set(session["signals"])),
             "risk_score": score,
             "risk_level": risk_level,
@@ -310,7 +314,7 @@ class CheckinBot:
 *Issues:*
 {chr(10).join(f'• {s}' for s in set(signals))}
 
-_Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}_
+_Time: {datetime.now(SG_TIMEZONE).strftime('%Y-%m-%d %H:%M')}_
 """
         
         async with aiohttp.ClientSession() as session:
