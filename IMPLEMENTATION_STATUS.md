@@ -29,10 +29,7 @@
 | Feature | Platform | Status | What's Done | What's Missing |
 |---------|----------|--------|-------------|----------------|
 | **Web Landing Page** | PWA | ⚠️ 50% | Basic landing page | Not deployed to Vercel |
-| **Chat Interface** | PWA | ⚠️ 60% | UI complete, demo mode | Not connected to MERaLiON |
-| **Dashboard** | PWA | ⚠️ 70% | UI with mock data | Not connected to Supabase |
-| **Patient List** | PWA | ⚠️ 70% | UI complete | Real data from DB |
-| **Alert Display** | PWA | ⚠️ 70% | UI complete | Real-time updates |
+| **Chat Interface** | PWA | ⚠️ 80% | UI complete with microphone input | Not connected to MERaLiON API |
 
 ---
 
@@ -40,13 +37,15 @@
 
 | Feature | Platform | Status | Notes |
 |---------|----------|--------|-------|
-| **Alexa Skill** | Alexa | 🚧 40% | Handler code written, not deployed |
-| Alexa Intent Model | Alexa | 🚧 40% | JSON created, needs upload |
-| Alexa Webhook | GCP | 🚧 40% | Code ready, needs Cloud Functions |
-| **Web Dashboard Auth** | PWA | 🚧 0% | Need Supabase Auth integration |
-| Real-time Alerts | PWA | 🚧 0% | Need WebSocket/SSE |
+| **Dashboard for Caregivers** | PWA | 🚧 0% | Not built - use Telegram bot instead |
+| **Alexa Skill** | Alexa | 🚧 60% | Handler code written, intent model ready |
+| Alexa Intent Model | Alexa | ✅ 100% | JSON created, ready to upload |
+| Alexa Webhook | GCP | 🚧 60% | Code ready, needs Cloud Functions deployment |
+| Alexa Testing | Mobile App | ✅ Ready | Can test via Alexa mobile app (no device needed) |
+| **Web Dashboard Auth** | PWA | 🚧 0% | Not implemented |
+| Real-time Alerts | PWA | 🚧 0% | Not implemented |
 | Report Generation UI | PWA | 🚧 0% | Backend ready, UI missing |
-| Graphs & Charts | PWA | 🚧 0% | Need Chart.js or similar |
+| Graphs & Charts | PWA | 🚧 0% | Not implemented |
 | **PWA Installation** | PWA | 🚧 0% | Need manifest.json, service worker |
 
 ---
@@ -76,59 +75,44 @@ Commands: /start, /registerpatient, /registercaseworker, /myrole, /assign, /addm
 
 ---
 
-### Web PWA (Secondary) - ⚠️ 30% Complete
+### Web PWA (Secondary) - ⚠️ 40% Complete
 
 **What's Built:**
 1. **Landing Page** (`/`)
    - ✅ Homepage with feature cards
-   - ✅ Links to /chat and /dashboard
+   - ✅ Links to chat interface
    - ❌ Not deployed to Vercel
 
 2. **Chat Interface** (`/chat`)
    - ✅ Chat UI with message bubbles
+   - ✅ **Microphone input support** (can speak to bot)
    - ✅ Risk score display
    - ✅ Demo AI responses (hardcoded)
    - ❌ Not connected to MERaLiON API
    - ❌ Not saving to database
 
-3. **Dashboard** (`/dashboard`)
-   - ✅ Stats cards (patients, check-ins, alerts)
-   - ✅ Patient list UI
-   - ✅ Alert display UI
-   - ❌ Using mock data
-   - ❌ Not connected to Supabase
-   - ❌ No authentication
-
-4. **Patient Details** (`/dashboard/[patientId]`)
-   - ⚠️ Page exists but minimal
-   - ❌ Not fully implemented
-
 **What's Missing:**
 - ❌ Vercel deployment
-- ❌ Supabase connection (still using mock data)
-- ❌ User authentication (Supabase Auth)
-- ❌ Real-time alert updates
 - ❌ MERaLiON API integration for chat
+- ❌ **No caregiver dashboard** (use Telegram bot instead)
+- ❌ No patient list or alert management
+- ❌ No authentication
 - ❌ PWA manifest & service worker
 - ❌ Push notifications
-- ❌ Report generation UI
-- ❌ Health trend graphs
-- ❌ Medication management UI
+
+**Note:** The PWA is designed as an alternative chat interface for patients who prefer web over Telegram. **Caregivers should use the Telegram bot** for monitoring and management.
 
 **Files:**
 ```
 ProjectIC/web/
 ├── app/
 │   ├── page.tsx              ✅ Landing page
-│   ├── chat/page.tsx         ⚠️ Chat (demo mode)
-│   ├── dashboard/
-│   │   ├── page.tsx          ⚠️ Dashboard (mock data)
-│   │   └── [patientId]/page.tsx  ⚠️ Patient details (minimal)
+│   ├── chat/page.tsx         ⚠️ Chat (demo mode, has microphone)
 │   ├── layout.tsx            ✅ App layout
 │   └── globals.css           ✅ Styles
 ├── lib/
-│   ├── supabase.ts           ✅ Client setup
-│   ├── sea-lion.ts           ✅ API client
+│   ├── supabase.ts           ✅ Client setup (not used yet)
+│   ├── sea-lion.ts           ✅ API client (not used yet)
 │   ├── analysis.ts           ✅ Risk scoring
 │   └── utils.ts              ✅ Utilities
 └── components/               ✅ UI components
@@ -136,11 +120,9 @@ ProjectIC/web/
 
 **To Complete PWA:**
 1. Deploy to Vercel
-2. Connect to Supabase (remove mock data)
-3. Connect chat to MERaLiON API
-4. Add authentication
-5. Add PWA manifest
-6. Test on mobile
+2. Connect chat to MERaLiON API
+3. Add PWA manifest
+4. Test on mobile with microphone
 
 ---
 

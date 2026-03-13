@@ -274,41 +274,48 @@ Time: 09:45 on 13 Mar 2026
 
 ---
 
-## 🌐 Web Dashboard (PWA)
+## 🌐 Web PWA
 
-**Status:** ⚠️ Partially Implemented (UI Complete, Not Yet Deployed)
+**Status:** ⚠️ Chat Interface Only (40% Complete)
 
-### What's Currently Built
+### What's Built
 
-**Landing Page** - Basic homepage with feature overview  
-**Chat Interface** - UI complete with demo AI responses (not connected to MERaLiON yet)  
-**Dashboard** - UI complete with mock data (not connected to Supabase yet)  
-**Patient List** - Basic display with mock patients
+**Chat Interface with Microphone:**
+- ✅ Basic landing page
+- ✅ Chat UI with message bubbles
+- ✅ **Microphone input** (patients can speak to bot)
+- ✅ Demo AI responses (hardcoded)
+
+### What's NOT Built
+
+**No Caregiver Dashboard:**
+- ❌ No patient monitoring interface
+- ❌ No alert management
+- ❌ No medication management UI
+- ❌ No reports or charts
+
+**Use Telegram Bot Instead:** Caregivers should use the Telegram bot for all monitoring and management features.
 
 ### What's Not Yet Implemented
 
 - ❌ Not deployed to Vercel
-- ❌ Using mock data (not connected to real database)
-- ❌ No user authentication
-- ❌ Chat not connected to MERaLiON API
+- ❌ Not connected to MERaLiON AI (using demo responses)
+- ❌ Not saving to database
 - ❌ Not a PWA yet (no manifest/service worker)
 
 ### Future Plans
 
 **Phase 1 (Planned):**
 - Deploy to Vercel
-- Connect to Supabase database
-- Add Supabase Auth for login
-- Connect chat to MERaLiON
+- Connect to MERaLiON API
+- Add PWA manifest
 
-**Phase 2 (Future):**
-- Real-time alert updates
-- Health trend graphs
-- Report generation UI
-- Push notifications
-- PWA installation
+**Phase 2 (Future - If Needed):**
+- Caregiver dashboard (optional - Telegram bot is primary)
+- Real-time updates
+- Health graphs
 
-### Access the Dashboard
+### Access the PWA
 
 **Local Development:**
 ```bash
@@ -319,11 +326,28 @@ npm run dev
 
 **Production:** Coming soon (will be deployed to Vercel)
 
+**Note:** The PWA is designed as an **alternative chat interface for patients** who prefer web over Telegram. **Caregivers should use the Telegram bot** for all monitoring features.
+
 ---
 
 ## 🎙️ Alexa Skill
 
-**Status:** 🚧 Designed but Not Yet Deployed (40% Complete)
+**Status:** 🚧 Code Ready, Not Yet Deployed (60% Complete)
+
+### How to Test (No Device Needed!)
+
+**✅ Test via Alexa Mobile App:**
+1. Install Alexa app on any smartphone (iOS/Android)
+2. Enable "Aescul Helper" skill
+3. Tap microphone icon in app
+4. Speak: "Alexa, open Aescul Helper"
+5. Have conversation with bot
+
+**Why Mobile App Testing Works:**
+- No physical Echo device required
+- Judges can test on their phones
+- No additional hardware purchase
+- Full voice interaction experience
 
 ### What's Ready
 
@@ -331,13 +355,14 @@ npm run dev
 - ✅ Backend handler code written
 - ✅ MERaLiON integration code
 - ✅ Conversation flow designed
+- ✅ Can be tested on Alexa mobile app
 
 ### What's Not Yet Done
 
 - ❌ Not uploaded to Alexa Developer Console
 - ❌ Not deployed to Google Cloud Functions
 - ❌ No account linking configured
-- ❌ Not tested on Echo devices
+- ❌ Not submitted for certification
 
 ### Future Plans
 
@@ -348,32 +373,15 @@ npm run dev
 - Configure account linking with Telegram
 
 **Phase 2 (Future):**
-- Test on Echo devices
 - Submit for certification
 - Add voice-only medication reminders
 - Multi-language support (Malay, Tamil)
 
-### How It Will Work (When Deployed)
-
-#### Setup (Future)
-
-1. Open Alexa app on your phone
-2. Go to "Skills & Games"
-3. Search for "Aescul Helper"
-4. Tap "Enable to Use"
-5. Link your account (matches with Telegram)
-
-#### Usage (Future)
-
-**Say:**
-> "Alexa, open Aescul Helper"
-
-**Or:**
-> "Alexa, ask Aescul Helper to check in"
-
-#### Example Conversation (Future)
+### Example Conversation (When Deployed)
 
 ```
+You: "Alexa, open Aescul Helper"
+
 Alexa: "Hello! I'm Aescul Helper, your health companion. How are you feeling today?"
 
 You: "I'm feeling tired"
@@ -385,7 +393,7 @@ You: "Not really, kept waking up"
 Alexa: "Aiyah, sleep problem again. Have you been stressed lately?"
 ```
 
-**Note:** The Alexa skill is designed and coded, but not yet deployed. It's planned for a future release after the Telegram bot and PWA are fully production-ready.
+**Note:** The Alexa skill is designed and coded, but not yet deployed. Once deployed, it can be tested on any smartphone with the Alexa app - no Echo device needed!
 
 ---
 
