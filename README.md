@@ -1,6 +1,8 @@
-# Project IC - AI Health Companion for Elderly Care
+# Project AesculAI - AI Health Companion for Elderly Care
 
 <div align="center">
+
+# Project AesculAI
 
 **🤖 AI-Powered Daily Health Check-ins for Elderly Patients Living Alone**
 
@@ -58,7 +60,7 @@
 
 ## 🎯 Overview
 
-**Project IC** is an AI-powered daily health check-in system designed for elderly patients living alone. Using natural conversations in Singlish, the system monitors physical and mental health, detects concerning signals, and alerts caregivers when needed.
+**Project AesculAI** is an AI-powered daily health check-in system designed for elderly patients living alone. Using natural conversations in Singlish, the system monitors physical and mental health, detects concerning signals, and alerts caregivers when needed.
 
 ### Key Highlights
 
@@ -257,7 +259,7 @@ You'll receive a summary of your health status.
 #### Example Alert (to Caregiver)
 
 ```
-🚨 Project IC Alert
+🚨 Project AesculAI Alert
 
 Patient: John
 Level: ORANGE
@@ -440,7 +442,7 @@ When you receive a medication reminder:
 
 ### General
 
-**Q: What is Project IC?**  
+**Q: What is Project AesculAI?**  
 A: An AI-powered daily health check-in system for elderly patients living alone. It monitors health through natural conversations and alerts caregivers when needed.
 
 **Q: Is it free?**  

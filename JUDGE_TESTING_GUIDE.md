@@ -1,10 +1,10 @@
-# Project IC - Judge Testing Guide
+# Project AesculAI - Judge Testing Guide
 
-Welcome, judges! This guide shows you how to test the Project IC elderly care system.
+Welcome, judges! This guide shows you how to test the Project AesculAI elderly care system.
 
 ## 🎯 Overview
 
-Project IC is an AI-powered daily health check-in system for elderly patients living alone. As a judge, you can test both **patient** and **case worker** experiences.
+Project AesculAI is an AI-powered daily health check-in system for elderly patients living alone. As a judge, you can test both **patient** and **case worker** experiences.
 
 ---
 

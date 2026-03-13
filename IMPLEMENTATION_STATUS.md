@@ -1,4 +1,4 @@
-# Project IC - Implementation Status
+# Project AesculAI - Implementation Status
 
 ## 🎯 Current State (March 2026)
 
@@ -160,7 +160,7 @@ ProjectIC/web/
    - ❌ Not deployed to Cloud Functions
 
 3. **Webhook Endpoint**
-   - ✅ Code ready in `skills/project-ic-google/fulfillment/`
+   - ✅ Code ready in `skills/project-aesculai-google/fulfillment/`
    - ❌ Not deployed to GCP
 
 **What's Missing:**
@@ -172,13 +172,13 @@ ProjectIC/web/
 
 **Files:**
 ```
-skills/project-ic-alexa/
+skills/project-aesculai-alexa/
 ├── skill-package/
 │   └── interactionModels/custom/en-US.json  ✅ Created
 └── lambda/
     └── alexa_handler.py                     ✅ Created
 
-skills/project-ic-google/fulfillment/
+skills/project-aesculai-google/fulfillment/
 └── main.py                                  ✅ Created (needs deployment)
 ```
 
@@ -350,7 +350,7 @@ skills/project-ic-google/fulfillment/
 
 **Live Systems:**
 - Bot: https://t.me/AesculAI_helper_bot
-- Code: https://github.com/eeeeeric21/project-ic-bot
+- Code: https://github.com/eeeeeric21/project-aesculai-bot
 
 **Documentation:**
 - [README.md](README.md) - User guide
