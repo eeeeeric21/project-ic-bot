@@ -469,6 +469,78 @@ async def myrole_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def assign_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /assign command for case workers to assign patients to themselves.
+    
+    Usage: /assign <patient_name>
+    Example: /assign John
+    
+    This assigns the patient to you (the case worker running the command).
+    """
+    user = update.effective_user
+    telegram_id = str(user.id)
+    
+    # Only case workers can assign patients
+    if not scheduler.is_case_worker(telegram_id):
+        await update.message.reply_text(
+            "⚠️ *Case Workers Only*\n\n"
+            "Only case workers can assign patients.\n"
+            "Use /registercaseworker to register as a case worker.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    if not context.args or len(context.args) < 1:
+        await update.message.reply_text(
+            "🔗 *Assign Patient*\n\n"
+            "Usage: `/assign <patient_name>`\n\n"
+            "Example: `/assign John`\n\n"
+            "This assigns the patient to you for monitoring.",
+            parse_mode='Markdown'
+        )
+        return
+    
+    patient_name = " ".join(context.args)
+    
+    # Find patient
+    patient_id = scheduler.get_patient_by_name(patient_name)
+    
+    if not patient_id:
+        # List available patients
+        patients_list = "\n".join([f"• {p.name}" for p in scheduler.patients.values()])
+        await update.message.reply_text(
+            f"❌ *Patient Not Found*\n\n"
+            f"Could not find patient: {patient_name}\n\n"
+            f"*Registered Patients:*\n{patients_list}",
+            parse_mode='Markdown'
+        )
+        return
+    
+    patient = scheduler.patients[patient_id]
+    
+    # Assign patient to case worker
+    success = scheduler.assign_patient_to_case_worker(patient_id, telegram_id)
+    
+    if success:
+        cw_name = scheduler.case_workers[telegram_id]["name"]
+        await update.message.reply_text(
+            f"✅ *Patient Assigned*\n\n"
+            f"👤 Patient: {patient.name}\n"
+            f"👨‍⚕️ Case Worker: {cw_name}\n\n"
+            f"You will now receive:\n"
+            f"• Health alerts for {patient.name}\n"
+            f"• Medication skip notifications\n"
+            f"• Weekly health reports",
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "❌ *Assignment Failed*\n\n"
+            "Could not assign patient. Please try again.",
+            parse_mode='Markdown'
+        )
+
+
 # ============================================
 # MEDICATION COMMANDS (for Case Workers)
 # ============================================
@@ -1421,6 +1493,10 @@ def setup_bot():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("end", end_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("registerpatient", registerpatient_command))
+    application.add_handler(CommandHandler("registercaseworker", registercaseworker_command))
+    application.add_handler(CommandHandler("myrole", myrole_command))
+    application.add_handler(CommandHandler("assign", assign_command))
     
     # Medication commands
     application.add_handler(CommandHandler("addmed", addmed_command))
@@ -1494,6 +1570,10 @@ def main():
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("end", end_command))
     application.add_handler(CommandHandler("status", status_command))
+    application.add_handler(CommandHandler("registerpatient", registerpatient_command))
+    application.add_handler(CommandHandler("registercaseworker", registercaseworker_command))
+    application.add_handler(CommandHandler("myrole", myrole_command))
+    application.add_handler(CommandHandler("assign", assign_command))
     
     # Medication commands
     application.add_handler(CommandHandler("addmed", addmed_command))

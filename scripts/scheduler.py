@@ -149,6 +149,58 @@ class CheckinScheduler:
         """Check if a telegram ID is a registered case worker."""
         return str(telegram_id) in self.case_workers
     
+    def assign_patient_to_case_worker(self, patient_id: str, case_worker_id: str) -> bool:
+        """Assign a patient to a case worker.
+        
+        Args:
+            patient_id: Telegram ID of the patient
+            case_worker_id: Telegram ID of the case worker
+            
+        Returns:
+            True if successful, False if patient or case worker not found
+        """
+        if patient_id not in self.patients:
+            return False
+        
+        if case_worker_id not in self.case_workers:
+            return False
+        
+        # Update patient's case worker
+        self.patients[patient_id].case_worker_id = case_worker_id
+        self._save_patients()
+        
+        # Update case worker's patient list
+        if patient_id not in self.case_workers[case_worker_id]["patients"]:
+            self.case_workers[case_worker_id]["patients"].append(patient_id)
+            self._save_case_workers()
+        
+        logger.info(f"Assigned patient {patient_id} to case worker {case_worker_id}")
+        return True
+    
+    def get_patient_by_name(self, name: str) -> Optional[str]:
+        """Find a patient by name (partial match, case insensitive).
+        
+        Returns:
+            Telegram ID if found, None otherwise
+        """
+        name_lower = name.lower()
+        for tid, patient in self.patients.items():
+            if name_lower in patient.name.lower() or name_lower in patient.preferred_name.lower():
+                return tid
+        return None
+    
+    def get_case_worker_by_name(self, name: str) -> Optional[str]:
+        """Find a case worker by name (partial match, case insensitive).
+        
+        Returns:
+            Telegram ID if found, None otherwise
+        """
+        name_lower = name.lower()
+        for tid, cw in self.case_workers.items():
+            if name_lower in cw["name"].lower():
+                return tid
+        return None
+    
     def _save_patients(self):
         """Save patients to config file."""
         config_path = Path(__file__).parent.parent / "config" / "patients.json"

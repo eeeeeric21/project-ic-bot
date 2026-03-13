@@ -127,6 +127,7 @@ This shows your current role(s).
 - `/myrole` - View your current role(s)
 
 ### For Case Workers:
+- `/assign <patient_name>` - Assign a patient to yourself for monitoring
 - `/addmed <patient> <med> <dosage> <times>` - Add medication
 - `/listmed <patient>` - List patient's medications
 - `/delmed <patient> <med>` - Delete medication
